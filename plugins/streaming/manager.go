@@ -145,28 +145,41 @@ type managedStream struct {
 
 func (m *managedStream) Close() error {
 	m.manager.rwlock.Lock()
-	if nsMap, ok := m.manager.streams[m.ns]; ok {
-		delete(nsMap, m.name)
-		if len(nsMap) == 0 {
-			delete(m.manager.streams, m.ns)
-		}
-	}
-	if m.lease != "" {
-		if nsMap, ok := m.manager.byLease[m.ns]; ok {
-			if lsMap, ok := nsMap[m.lease]; ok {
-				delete(lsMap, m.name)
-				if len(lsMap) == 0 {
-					delete(nsMap, m.lease)
-				}
-			}
-			if len(nsMap) == 0 {
-				delete(m.manager.byLease, m.ns)
-			}
-		}
-	}
-
+	m.manager.removeLocked(m.ns, m.name)
 	m.manager.rwlock.Unlock()
 	return m.Stream.Close()
+}
+
+// removeLocked removes the named stream from the manager and returns it,
+// or nil if it is not registered. The caller must hold the write lock.
+func (sm *streamManager) removeLocked(ns, name string) *managedStream {
+	nsMap, ok := sm.streams[ns]
+	if !ok {
+		return nil
+	}
+	ms, ok := nsMap[name]
+	if !ok {
+		return nil
+	}
+	delete(nsMap, name)
+	if len(nsMap) == 0 {
+		delete(sm.streams, ns)
+	}
+	if ms.lease == "" {
+		return ms
+	}
+	if nsMap, ok := sm.byLease[ns]; ok {
+		if lsMap, ok := nsMap[ms.lease]; ok {
+			delete(lsMap, name)
+			if len(lsMap) == 0 {
+				delete(nsMap, ms.lease)
+			}
+		}
+		if len(nsMap) == 0 {
+			delete(sm.byLease, ns)
+		}
+	}
+	return ms
 }
 
 type collectionContext struct {
@@ -230,29 +243,8 @@ func (cc *collectionContext) Cancel() error {
 func (cc *collectionContext) Finish() error {
 	var closeStreams []streaming.Stream
 	for _, node := range cc.removed {
-		var lease string
-		if nsMap, ok := cc.manager.streams[node.Namespace]; ok {
-			if ms, ok := nsMap[node.Key]; ok {
-				delete(nsMap, node.Key)
-				closeStreams = append(closeStreams, ms.Stream)
-				lease = ms.lease
-			}
-			if len(nsMap) == 0 {
-				delete(cc.manager.streams, node.Namespace)
-			}
-		}
-		if lease != "" {
-			if nsMap, ok := cc.manager.byLease[node.Namespace]; ok {
-				if lsMap, ok := nsMap[lease]; ok {
-					delete(lsMap, node.Key)
-					if len(lsMap) == 0 {
-						delete(nsMap, lease)
-					}
-				}
-				if len(nsMap) == 0 {
-					delete(cc.manager.byLease, node.Namespace)
-				}
-			}
+		if ms := cc.manager.removeLocked(node.Namespace, node.Key); ms != nil {
+			closeStreams = append(closeStreams, ms.Stream)
 		}
 	}
 	cc.manager.rwlock.Unlock()
