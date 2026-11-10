@@ -27,13 +27,13 @@ import (
 
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
-	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/diffapply"
 	"github.com/containerd/containerd/v2/internal/erofsutils"
 	"github.com/containerd/containerd/v2/pkg/tracing"
 
@@ -208,15 +208,15 @@ func (s erofsDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []
 		return emptyDesc, err
 	}
 
-	ra, err := s.store.ReaderAt(ctx, desc)
-	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to get reader from content store: %w", err)
-	}
-	defer ra.Close()
-
 	layerBlobPath := path.Join(layer, "layer.erofs")
 	// Allow copy file range when there is an uncompressed native EROFS layer
 	if fastcopy {
+		ra, err := s.store.ReaderAt(ctx, desc)
+		if err != nil {
+			return emptyDesc, fmt.Errorf("failed to get reader from content store: %w", err)
+		}
+		defer ra.Close()
+
 		f, err := os.Create(layerBlobPath)
 		if err != nil {
 			return emptyDesc, err
@@ -230,66 +230,52 @@ func (s erofsDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []
 		return desc, nil
 	}
 
-	processor := diff.NewProcessorChain(diffLayerType, content.NewReader(ra))
-	for {
-		if processor, err = diff.GetProcessor(ctx, processor, config.ProcessorPayloads); err != nil {
-			return emptyDesc, fmt.Errorf("failed to get stream processor for %s: %w", desc.MediaType, err)
-		}
-		if processor.MediaType() == ocispec.MediaTypeImageLayer {
-			break
-		}
-	}
-	defer processor.Close()
-
-	digester := digest.Canonical.Digester()
-	rc := &readCounter{
-		r: io.TeeReader(processor, digester.Hash()),
-	}
-
 	// Choose between tar index or tar conversion mode
 	// Generate deterministic UUID from layer digest
 	u := uuid.NewSHA1(uuid.NameSpaceURL, []byte("erofs:blobs/"+desc.Digest))
-	if native {
-		f, err := os.Create(layerBlobPath)
-		if err != nil {
-			return emptyDesc, err
-		}
-		_, err = io.Copy(f, rc)
-		f.Close()
-		if err != nil {
-			return emptyDesc, err
-		}
-		log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer with compressed EROFS blob")
-	} else if s.enableTarIndex && s.useMkfs {
-		// Use the tar index method: generate tar index and append tar
-		err = erofsutils.MkfsGenerateTarIndex(ctx, rc, layerBlobPath, u.String(), s.mkfsExtraOpts)
-		if err != nil {
-			return emptyDesc, fmt.Errorf("failed to generate tar index: %w", err)
-		}
-		log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer using tar index mode")
-	} else if s.enableTarIndex {
-		// Use the tar index method: a metadata image whose file data lives in
-		// a separate data device
-		err = erofsutils.ConvertTarErofsIndex(ctx, rc, layerBlobPath, erofsutils.DevicePath(layer, 0), u.String())
-		if err != nil {
-			return emptyDesc, fmt.Errorf("failed to generate tar index: %w", err)
-		}
-		log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer using tar index mode")
-	} else {
-		// Use the tar method: fully convert tar to EROFS
-		if s.useMkfs {
-			err = erofsutils.MkfsConvertTar(ctx, rc, layerBlobPath, u.String(), s.mkfsExtraOpts)
+	dgst, size, err := diffapply.Apply(ctx, s.store, desc, diffLayerType, config, func(rc io.Reader) error {
+		if native {
+			f, err := os.Create(layerBlobPath)
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(f, rc)
+			f.Close()
+			if err != nil {
+				return err
+			}
+			log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer with compressed EROFS blob")
+		} else if s.enableTarIndex && s.useMkfs {
+			// Use the tar index method: generate tar index and append tar
+			err := erofsutils.MkfsGenerateTarIndex(ctx, rc, layerBlobPath, u.String(), s.mkfsExtraOpts)
+			if err != nil {
+				return fmt.Errorf("failed to generate tar index: %w", err)
+			}
+			log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer using tar index mode")
+		} else if s.enableTarIndex {
+			// Use the tar index method: a metadata image whose file data lives in
+			// a separate data device
+			err := erofsutils.ConvertTarErofsIndex(ctx, rc, layerBlobPath, erofsutils.DevicePath(layer, 0), u.String())
+			if err != nil {
+				return fmt.Errorf("failed to generate tar index: %w", err)
+			}
+			log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer using tar index mode")
 		} else {
-			err = erofsutils.ConvertTarErofs(ctx, rc, layerBlobPath, u.String())
+			// Use the tar method: fully convert tar to EROFS
+			var err error
+			if s.useMkfs {
+				err = erofsutils.MkfsConvertTar(ctx, rc, layerBlobPath, u.String(), s.mkfsExtraOpts)
+			} else {
+				err = erofsutils.ConvertTarErofs(ctx, rc, layerBlobPath, u.String())
+			}
+			if err != nil {
+				return fmt.Errorf("failed to convert tar to erofs: %w", err)
+			}
+			log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer using tar conversion mode")
 		}
-		if err != nil {
-			return emptyDesc, fmt.Errorf("failed to convert tar to erofs: %w", err)
-		}
-		log.G(ctx).WithField("path", layerBlobPath).Debug("Applied layer using tar conversion mode")
-	}
-
-	// Read any trailing data
-	if _, err := io.Copy(io.Discard, rc); err != nil {
+		return nil
+	})
+	if err != nil {
 		return emptyDesc, err
 	}
 
@@ -309,24 +295,13 @@ func (s erofsDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts []
 	if native {
 		return ocispec.Descriptor{
 			MediaType: erofsLayerType,
-			Size:      rc.c,
-			Digest:    digester.Digest(),
+			Size:      size,
+			Digest:    dgst,
 		}, nil
 	}
 	return ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageLayer,
-		Size:      rc.c,
-		Digest:    digester.Digest(),
+		Size:      size,
+		Digest:    dgst,
 	}, nil
-}
-
-type readCounter struct {
-	r io.Reader
-	c int64
-}
-
-func (rc *readCounter) Read(p []byte) (n int, err error) {
-	n, err = rc.r.Read(p)
-	rc.c += int64(n)
-	return
 }

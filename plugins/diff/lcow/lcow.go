@@ -33,12 +33,12 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/diffapply"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/containerd/plugin"
 	"github.com/containerd/plugin/registry"
-	digest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -120,53 +120,34 @@ func (s windowsLcowDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mou
 		return emptyDesc, err
 	}
 
-	ra, err := s.store.ReaderAt(ctx, desc)
-	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to get reader from content store: %w", err)
-	}
-	defer ra.Close()
-
-	processor := diff.NewProcessorChain(desc.MediaType, content.NewReader(ra))
-	for {
-		if processor, err = diff.GetProcessor(ctx, processor, config.ProcessorPayloads); err != nil {
-			return emptyDesc, fmt.Errorf("failed to get stream processor for %s: %w", desc.MediaType, err)
-		}
-		if processor.MediaType() == ocispec.MediaTypeImageLayer {
-			break
-		}
-	}
-	defer processor.Close()
-
-	// Calculate the Digest as we go
-	digester := digest.Canonical.Digester()
-	rc := &readCounter{
-		r: io.TeeReader(processor, digester.Hash()),
-	}
-
 	layerPath := path.Join(layer, "layer.vhd")
-	outFile, err := os.Create(layerPath)
-	if err != nil {
-		return emptyDesc, err
-	}
+	var outFile *os.File
 	defer func() {
-		if err != nil {
+		if err != nil && outFile != nil {
 			outFile.Close()
 			os.Remove(layerPath)
 		}
 	}()
 
-	err = tar2ext4.Convert(rc, outFile, tar2ext4.ConvertWhiteout, tar2ext4.AppendVhdFooter, tar2ext4.MaximumDiskSize(maxLcowVhdSizeGB))
-	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to convert tar2ext4 vhd: %w", err)
-	}
-	err = outFile.Sync()
-	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to sync tar2ext4 vhd to disk: %w", err)
-	}
-	outFile.Close()
+	dgst, size, err := diffapply.Apply(ctx, s.store, desc, desc.MediaType, config, func(r io.Reader) error {
+		var err error
+		outFile, err = os.Create(layerPath)
+		if err != nil {
+			return err
+		}
 
-	// Read any trailing data
-	if _, err := io.Copy(io.Discard, rc); err != nil {
+		err = tar2ext4.Convert(r, outFile, tar2ext4.ConvertWhiteout, tar2ext4.AppendVhdFooter, tar2ext4.MaximumDiskSize(maxLcowVhdSizeGB))
+		if err != nil {
+			return fmt.Errorf("failed to convert tar2ext4 vhd: %w", err)
+		}
+		err = outFile.Sync()
+		if err != nil {
+			return fmt.Errorf("failed to sync tar2ext4 vhd to disk: %w", err)
+		}
+		outFile.Close()
+		return nil
+	})
+	if err != nil {
 		return emptyDesc, err
 	}
 
@@ -177,8 +158,8 @@ func (s windowsLcowDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mou
 
 	return ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageLayer,
-		Size:      rc.c,
-		Digest:    digester.Digest(),
+		Size:      size,
+		Digest:    dgst,
 	}, nil
 }
 
@@ -186,17 +167,6 @@ func (s windowsLcowDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mou
 // to the content store.
 func (s windowsLcowDiff) Compare(ctx context.Context, lower, upper []mount.Mount, opts ...diff.Opt) (d ocispec.Descriptor, err error) {
 	return emptyDesc, fmt.Errorf("windowsLcowDiff does not implement Compare method: %w", errdefs.ErrNotImplemented)
-}
-
-type readCounter struct {
-	r io.Reader
-	c int64
-}
-
-func (rc *readCounter) Read(p []byte) (n int, err error) {
-	n, err = rc.r.Read(p)
-	rc.c += int64(n)
-	return
 }
 
 func mountsToLayerAndParents(mounts []mount.Mount) (string, []string, error) {

@@ -33,13 +33,13 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/diffapply"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/containerd/platforms"
 	"github.com/containerd/plugin"
 	"github.com/containerd/plugin/registry"
-	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -265,40 +265,17 @@ func applyCIMLayerCommon(ctx context.Context, desc ocispec.Descriptor, store con
 		}
 	}()
 
-	ra, err := store.ReaderAt(ctx, desc)
+	dgst, size, err := diffapply.Apply(ctx, store, desc, desc.MediaType, config, func(r io.Reader) error {
+		_, err := applyFunc(ctx, r)
+		return err
+	})
 	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to get reader from content store: %w", err)
-	}
-	defer ra.Close()
-
-	processor := diff.NewProcessorChain(desc.MediaType, content.NewReader(ra))
-	for {
-		if processor, err = diff.GetProcessor(ctx, processor, config.ProcessorPayloads); err != nil {
-			return emptyDesc, fmt.Errorf("failed to get stream processor for %s: %w", desc.MediaType, err)
-		}
-		if processor.MediaType() == ocispec.MediaTypeImageLayer {
-			break
-		}
-	}
-	defer processor.Close()
-
-	digester := digest.Canonical.Digester()
-	rc := &readCounter{
-		r: io.TeeReader(processor, digester.Hash()),
-	}
-
-	if _, err = applyFunc(ctx, rc); err != nil {
-		return emptyDesc, err
-	}
-
-	// Read any trailing data
-	if _, err := io.Copy(io.Discard, rc); err != nil {
 		return emptyDesc, err
 	}
 
 	return ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageLayer,
-		Size:      rc.c,
-		Digest:    digester.Digest(),
+		Size:      size,
+		Digest:    dgst,
 	}, nil
 }

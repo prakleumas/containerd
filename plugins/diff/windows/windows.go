@@ -39,6 +39,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/diffapply"
 	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/epoch"
@@ -124,47 +125,24 @@ func (s windowsDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts 
 		}
 	}
 
-	ra, err := s.store.ReaderAt(ctx, desc)
-	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to get reader from content store: %w", err)
-	}
-	defer ra.Close()
-
-	processor := diff.NewProcessorChain(desc.MediaType, content.NewReader(ra))
-	for {
-		if processor, err = diff.GetProcessor(ctx, processor, config.ProcessorPayloads); err != nil {
-			return emptyDesc, fmt.Errorf("failed to get stream processor for %s: %w", desc.MediaType, err)
-		}
-		if processor.MediaType() == ocispec.MediaTypeImageLayer {
-			break
-		}
-	}
-	defer processor.Close()
-
-	digester := digest.Canonical.Digester()
-	rc := &readCounter{
-		r: io.TeeReader(processor, digester.Hash()),
-	}
-
 	archiveOpts := []archive.ApplyOpt{
 		archive.WithParents(parentLayerPaths),
 		archive.WithNoSameOwner(), // Lchown is not supported on Windows
 		archive.AsWindowsContainerLayer(),
 	}
 
-	if _, err := archive.Apply(ctx, layerPath, rc, archiveOpts...); err != nil {
-		return emptyDesc, err
-	}
-
-	// Read any trailing data
-	if _, err := io.Copy(io.Discard, rc); err != nil {
+	dgst, size, err := diffapply.Apply(ctx, s.store, desc, desc.MediaType, config, func(r io.Reader) error {
+		_, err := archive.Apply(ctx, layerPath, r, archiveOpts...)
+		return err
+	})
+	if err != nil {
 		return emptyDesc, err
 	}
 
 	return ocispec.Descriptor{
 		MediaType: ocispec.MediaTypeImageLayer,
-		Size:      rc.c,
-		Digest:    digester.Digest(),
+		Size:      size,
+		Digest:    dgst,
 	}, nil
 
 }
@@ -307,17 +285,6 @@ func (s windowsDiff) Compare(ctx context.Context, lower, upper []mount.Mount, op
 	}).Debug("diff created")
 
 	return desc, nil
-}
-
-type readCounter struct {
-	r io.Reader
-	c int64
-}
-
-func (rc *readCounter) Read(p []byte) (n int, err error) {
-	n, err = rc.r.Read(p)
-	rc.c += int64(n)
-	return
 }
 
 func mountsToLayerAndParents(mounts []mount.Mount) (string, []string, error) {
