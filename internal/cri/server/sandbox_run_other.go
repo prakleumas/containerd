@@ -1,4 +1,4 @@
-//go:build !windows && !linux
+//go:build !linux
 
 /*
    Copyright The containerd Authors.
@@ -19,7 +19,8 @@
 package server
 
 import (
-	"errors"
+	"fmt"
+	goruntime "runtime"
 
 	"github.com/containerd/containerd/v2/pkg/netns"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
@@ -30,5 +31,5 @@ func (c *criService) bringUpLoopback(string) error {
 }
 
 func (c *criService) setupNetnsWithinUserns(basedir string, cfg *runtime.UserNamespace) (*netns.NetNS, error) {
-	return nil, errors.New("unsupported to setup netns within userns on unix platform")
+	return nil, fmt.Errorf("unsupported to setup netns within userns on %s platform", goruntime.GOOS)
 }
