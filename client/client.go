@@ -257,49 +257,36 @@ func (c *Client) Runtime() string {
 }
 
 func (c *Client) defaultRuntime(ctx context.Context) (string, error) {
-	c.defaults.mut.Lock()
-	defer c.defaults.mut.Unlock()
-
-	if c.defaults.runtime != "" {
-		return c.defaults.runtime, nil
-	}
-
-	if c.defaultns != "" {
-		label, err := c.GetLabel(ctx, defaults.DefaultRuntimeNSLabel)
-		if err != nil {
-			// Don't set the runtime value if there's an error
-			return defaults.DefaultRuntime, fmt.Errorf("failed to get default runtime label: %w", err)
-		}
-		if label != "" {
-			c.defaults.runtime = label
-			return label, nil
-		}
-	}
-	c.defaults.runtime = defaults.DefaultRuntime
-	return c.defaults.runtime, nil
+	return c.defaultValue(ctx, &c.defaults.runtime, "runtime", defaults.DefaultRuntimeNSLabel, defaults.DefaultRuntime)
 }
 
 func (c *Client) defaultSandboxer(ctx context.Context) (string, error) {
+	return c.defaultValue(ctx, &c.defaults.sandboxer, "sandboxer", defaults.DefaultSandboxerNSLabel, defaults.DefaultSandboxer)
+}
+
+// defaultValue returns *value, filling it on first use from the namespace
+// label, or from fallback when the label is unset.
+func (c *Client) defaultValue(ctx context.Context, value *string, kind, label, fallback string) (string, error) {
 	c.defaults.mut.Lock()
 	defer c.defaults.mut.Unlock()
 
-	if c.defaults.sandboxer != "" {
-		return c.defaults.sandboxer, nil
+	if *value != "" {
+		return *value, nil
 	}
 
 	if c.defaultns != "" {
-		label, err := c.GetLabel(ctx, defaults.DefaultSandboxerNSLabel)
+		v, err := c.GetLabel(ctx, label)
 		if err != nil {
-			// Don't set the sandboxer value if there's an error
-			return defaults.DefaultSandboxer, fmt.Errorf("failed to get default sandboxer label: %w", err)
+			// Don't set the value if there's an error
+			return fallback, fmt.Errorf("failed to get default %s label: %w", kind, err)
 		}
-		if label != "" {
-			c.defaults.sandboxer = label
-			return label, nil
+		if v != "" {
+			*value = v
+			return v, nil
 		}
 	}
-	c.defaults.sandboxer = defaults.DefaultSandboxer
-	return c.defaults.sandboxer, nil
+	*value = fallback
+	return fallback, nil
 }
 
 // IsServing returns true if the client can successfully connect to the
