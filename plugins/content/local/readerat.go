@@ -34,7 +34,7 @@ type sizeReaderAt struct {
 
 // OpenReader creates ReaderAt from a file
 func OpenReader(p string) (content.ReaderAt, error) {
-	fi, err := os.Stat(p)
+	fp, err := os.Open(p)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -43,13 +43,10 @@ func OpenReader(p string) (content.ReaderAt, error) {
 		return nil, fmt.Errorf("blob not found: %w", errdefs.ErrNotFound)
 	}
 
-	fp, err := os.Open(p)
+	fi, err := fp.Stat()
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-
-		return nil, fmt.Errorf("blob not found: %w", errdefs.ErrNotFound)
+		fp.Close()
+		return nil, err
 	}
 
 	return sizeReaderAt{size: fi.Size(), fp: fp}, nil
