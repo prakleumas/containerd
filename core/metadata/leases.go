@@ -334,10 +334,13 @@ func (lm *leaseManager) ListResources(ctx context.Context, lease leases.Lease) (
 	return rs, nil
 }
 
-func addSnapshotLease(ctx context.Context, tx *bolt.Tx, snapshotter, key string) error {
+// addLeaseRef adds key to the bucket at path within the bucket of the lease
+// in ctx, creating the buckets on path as needed. It reports whether ctx
+// carries a lease and returns an error if that lease does not exist.
+func addLeaseRef(ctx context.Context, tx *bolt.Tx, key string, path ...[]byte) (bool, error) {
 	lid, ok := leases.FromContext(ctx)
 	if !ok {
-		return nil
+		return false, nil
 	}
 
 	namespace, ok := namespaces.Namespace(ctx)
@@ -347,23 +350,28 @@ func addSnapshotLease(ctx context.Context, tx *bolt.Tx, snapshotter, key string)
 
 	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid))
 	if bkt == nil {
-		return fmt.Errorf("lease does not exist: %w", errdefs.ErrNotFound)
+		return false, fmt.Errorf("lease does not exist: %w", errdefs.ErrNotFound)
 	}
 
-	bkt, err := bkt.CreateBucketIfNotExists(bucketKeyObjectSnapshots)
-	if err != nil {
-		return err
+	for _, name := range path {
+		var err error
+		bkt, err = bkt.CreateBucketIfNotExists(name)
+		if err != nil {
+			return false, err
+		}
 	}
 
-	bkt, err = bkt.CreateBucketIfNotExists([]byte(snapshotter))
-	if err != nil {
-		return err
+	if err := bkt.Put([]byte(key), nil); err != nil {
+		return false, err
 	}
 
-	return bkt.Put([]byte(key), nil)
+	return true, nil
 }
 
-func removeSnapshotLease(ctx context.Context, tx *bolt.Tx, snapshotter, key string) error {
+// removeLeaseRef removes key from the bucket at path within the bucket of the
+// lease in ctx. It does nothing if ctx carries no lease or the bucket does
+// not exist.
+func removeLeaseRef(ctx context.Context, tx *bolt.Tx, key string, path ...[]byte) error {
 	lid, ok := leases.FromContext(ctx)
 	if !ok {
 		return nil
@@ -374,7 +382,8 @@ func removeSnapshotLease(ctx context.Context, tx *bolt.Tx, snapshotter, key stri
 		panic("namespace must already be checked")
 	}
 
-	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid), bucketKeyObjectSnapshots, []byte(snapshotter))
+	keys := append([][]byte{bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid)}, path...)
+	bkt := getBucket(tx, keys...)
 	if bkt == nil {
 		// Key does not exist so we return nil
 		return nil
@@ -383,149 +392,44 @@ func removeSnapshotLease(ctx context.Context, tx *bolt.Tx, snapshotter, key stri
 	return bkt.Delete([]byte(key))
 }
 
+func addSnapshotLease(ctx context.Context, tx *bolt.Tx, snapshotter, key string) error {
+	_, err := addLeaseRef(ctx, tx, key, bucketKeyObjectSnapshots, []byte(snapshotter))
+	return err
+}
+
+func removeSnapshotLease(ctx context.Context, tx *bolt.Tx, snapshotter, key string) error {
+	return removeLeaseRef(ctx, tx, key, bucketKeyObjectSnapshots, []byte(snapshotter))
+}
+
 func addContentLease(ctx context.Context, tx *bolt.Tx, dgst digest.Digest) error {
-	lid, ok := leases.FromContext(ctx)
-	if !ok {
-		return nil
-	}
-
-	namespace, ok := namespaces.Namespace(ctx)
-	if !ok {
-		panic("namespace must already be required")
-	}
-
-	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid))
-	if bkt == nil {
-		return fmt.Errorf("lease does not exist: %w", errdefs.ErrNotFound)
-	}
-
-	bkt, err := bkt.CreateBucketIfNotExists(bucketKeyObjectContent)
-	if err != nil {
-		return err
-	}
-
-	return bkt.Put([]byte(dgst.String()), nil)
+	_, err := addLeaseRef(ctx, tx, dgst.String(), bucketKeyObjectContent)
+	return err
 }
 
 func removeContentLease(ctx context.Context, tx *bolt.Tx, dgst digest.Digest) error {
-	lid, ok := leases.FromContext(ctx)
-	if !ok {
-		return nil
-	}
-
-	namespace, ok := namespaces.Namespace(ctx)
-	if !ok {
-		panic("namespace must already be checked")
-	}
-
-	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid), bucketKeyObjectContent)
-	if bkt == nil {
-		// Key does not exist so we return nil
-		return nil
-	}
-
-	return bkt.Delete([]byte(dgst.String()))
+	return removeLeaseRef(ctx, tx, dgst.String(), bucketKeyObjectContent)
 }
 
 func addIngestLease(ctx context.Context, tx *bolt.Tx, ref string) (bool, error) {
-	lid, ok := leases.FromContext(ctx)
-	if !ok {
-		return false, nil
-	}
-
-	namespace, ok := namespaces.Namespace(ctx)
-	if !ok {
-		panic("namespace must already be required")
-	}
-
-	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid))
-	if bkt == nil {
-		return false, fmt.Errorf("lease does not exist: %w", errdefs.ErrNotFound)
-	}
-
-	bkt, err := bkt.CreateBucketIfNotExists(bucketKeyObjectIngests)
-	if err != nil {
-		return false, err
-	}
-
-	if err := bkt.Put([]byte(ref), nil); err != nil {
-		return false, err
-	}
-
-	return true, nil
+	return addLeaseRef(ctx, tx, ref, bucketKeyObjectIngests)
 }
 
 func removeIngestLease(ctx context.Context, tx *bolt.Tx, ref string) error {
-	lid, ok := leases.FromContext(ctx)
-	if !ok {
-		return nil
-	}
-
-	namespace, ok := namespaces.Namespace(ctx)
-	if !ok {
-		panic("namespace must already be checked")
-	}
-
-	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid), bucketKeyObjectIngests)
-	if bkt == nil {
-		// Key does not exist so we return nil
-		return nil
-	}
-
-	return bkt.Delete([]byte(ref))
+	return removeLeaseRef(ctx, tx, ref, bucketKeyObjectIngests)
 }
 
 func addImageLease(ctx context.Context, tx *bolt.Tx, ref string, labels map[string]string) error {
-	lid, ok := leases.FromContext(ctx)
-	if !ok {
-		return nil
-	}
-
 	// If image doesn't have expiration, it does not need to be leased
 	if _, ok := labels[string(labelGCExpire)]; !ok {
 		return nil
 	}
 
-	namespace, ok := namespaces.Namespace(ctx)
-	if !ok {
-		panic("namespace must already be required")
-	}
-
-	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid))
-	if bkt == nil {
-		return fmt.Errorf("lease does not exist: %w", errdefs.ErrNotFound)
-	}
-
-	bkt, err := bkt.CreateBucketIfNotExists(bucketKeyObjectImages)
-	if err != nil {
-		return err
-	}
-
-	if err := bkt.Put([]byte(ref), nil); err != nil {
-		return err
-	}
-
-	return nil
+	_, err := addLeaseRef(ctx, tx, ref, bucketKeyObjectImages)
+	return err
 }
 
 func removeImageLease(ctx context.Context, tx *bolt.Tx, ref string) error {
-	lid, ok := leases.FromContext(ctx)
-	if !ok {
-		return nil
-	}
-
-	namespace, ok := namespaces.Namespace(ctx)
-	if !ok {
-		panic("namespace must already be checked")
-	}
-
-	bkt := getBucket(tx, bucketKeyVersion, []byte(namespace), bucketKeyObjectLeases, []byte(lid), bucketKeyObjectImages)
-	if bkt == nil {
-		// Key does not exist so we return nil
-		return nil
-	}
-
-	return bkt.Delete([]byte(ref))
+	return removeLeaseRef(ctx, tx, ref, bucketKeyObjectImages)
 }
 
 func parseLeaseResource(r leases.Resource) ([]string, string, error) {
