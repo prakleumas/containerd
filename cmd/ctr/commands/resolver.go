@@ -54,31 +54,40 @@ func passwordPrompt() (string, error) {
 	return string(line), nil
 }
 
-// GetResolver prepares the resolver from the environment and options
-func GetResolver(ctx context.Context, cmd *cli.Command) (remotes.Resolver, error) {
-	username := cmd.String("user")
-	var secret string
+// userCredentials parses the --user "name:secret" flag. It prompts for
+// the password when the flag has no secret, and uses --refresh as the
+// secret when the flag is empty.
+func userCredentials(cmd *cli.Command) (username, secret string, err error) {
+	username = cmd.String("user")
 	if i := strings.IndexByte(username, ':'); i > 0 {
 		secret = username[i+1:]
 		username = username[0:i]
-	}
-	options := docker.ResolverOptions{
-		Tracker: PushTracker,
 	}
 	if username != "" {
 		if secret == "" {
 			fmt.Printf("Password: ")
 
-			var err error
 			secret, err = passwordPrompt()
 			if err != nil {
-				return nil, err
+				return "", "", err
 			}
 
 			fmt.Print("\n")
 		}
 	} else if rt := cmd.String("refresh"); rt != "" {
 		secret = rt
+	}
+	return username, secret, nil
+}
+
+// GetResolver prepares the resolver from the environment and options
+func GetResolver(ctx context.Context, cmd *cli.Command) (remotes.Resolver, error) {
+	username, secret, err := userCredentials(cmd)
+	if err != nil {
+		return nil, err
+	}
+	options := docker.ResolverOptions{
+		Tracker: PushTracker,
 	}
 
 	hostOptions := config.HostOptions{}
@@ -159,26 +168,9 @@ type staticCredentials struct {
 
 // NewStaticCredentials gets credentials from passing in cli context
 func NewStaticCredentials(ctx context.Context, cmd *cli.Command, ref string) (registry.CredentialHelper, error) {
-	username := cmd.String("user")
-	var secret string
-	if i := strings.IndexByte(username, ':'); i > 0 {
-		secret = username[i+1:]
-		username = username[0:i]
-	}
-	if username != "" {
-		if secret == "" {
-			fmt.Printf("Password: ")
-
-			var err error
-			secret, err = passwordPrompt()
-			if err != nil {
-				return nil, err
-			}
-
-			fmt.Print("\n")
-		}
-	} else if rt := cmd.String("refresh"); rt != "" {
-		secret = rt
+	username, secret, err := userCredentials(cmd)
+	if err != nil {
+		return nil, err
 	}
 
 	return &staticCredentials{
