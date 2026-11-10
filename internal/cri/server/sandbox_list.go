@@ -92,18 +92,8 @@ func (c *criService) filterCRISandboxes(sandboxes []*runtime.PodSandbox, filter 
 			continue
 		}
 		// Filter by label
-		if filter.GetLabelSelector() != nil {
-			match := true
-			for k, v := range filter.GetLabelSelector() {
-				got, ok := s.Labels[k]
-				if !ok || got != v {
-					match = false
-					break
-				}
-			}
-			if !match {
-				continue
-			}
+		if !matchLabelSelector(filter.GetLabelSelector(), s.Labels) {
+			continue
 		}
 		filtered = append(filtered, s)
 	}
