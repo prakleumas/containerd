@@ -648,14 +648,13 @@ func (l *local) Wait(ctx context.Context, r *api.WaitRequest, _ ...grpc.CallOpti
 func getTasksMetrics(ctx context.Context, filter filters.Filter, tasks []runtime.Task, r *api.MetricsResponse) {
 	for _, tk := range tasks {
 		if !filter.Match(filters.AdapterFunc(func(fieldpath []string) (string, bool) {
-			t := tk
 			switch fieldpath[0] {
 			case "id":
-				return t.ID(), true
+				return tk.ID(), true
 			case "namespace":
-				return t.Namespace(), true
+				return tk.Namespace(), true
 			case "runtime":
-				// return t.Info().Runtime, true
+				// return tk.Info().Runtime, true
 			}
 			return "", false
 		})) {
