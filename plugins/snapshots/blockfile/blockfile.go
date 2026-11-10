@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
+	"github.com/containerd/containerd/v2/plugins/snapshots/internal/metastore"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/log"
 	"github.com/containerd/plugin"
@@ -325,38 +326,9 @@ func (o *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 
 // Remove abandons the transaction identified by key. All resources
 // associated with the key will be removed.
-func (o *snapshotter) Remove(ctx context.Context, key string) (err error) {
-	var (
-		renamed, path string
-		restore       bool
-	)
-
-	err = o.ms.WithTransaction(ctx, true, func(ctx context.Context) error {
-		id, _, err := storage.Remove(ctx, key)
-		if err != nil {
-			return fmt.Errorf("failed to remove: %w", err)
-		}
-
-		path = o.getBlockFile(id)
-		renamed = filepath.Join(o.root, "snapshots", "rm-"+id)
-		if err = os.Rename(path, renamed); err != nil {
-			if !os.IsNotExist(err) {
-				return fmt.Errorf("failed to rename: %w", err)
-			}
-			renamed = ""
-		}
-
-		restore = true
-		return nil
-	})
-
+func (o *snapshotter) Remove(ctx context.Context, key string) error {
+	renamed, err := metastore.Remove(ctx, o.ms, key, o.getBlockFile)
 	if err != nil {
-		if renamed != "" && restore {
-			if err1 := os.Rename(renamed, path); err1 != nil {
-				// May cause inconsistent data on disk
-				log.G(ctx).WithError(err1).WithField("path", renamed).Error("failed to rename after failed commit")
-			}
-		}
 		return err
 	}
 	if renamed != "" {

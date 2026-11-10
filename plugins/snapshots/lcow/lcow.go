@@ -37,6 +37,7 @@ import (
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
 	"github.com/containerd/containerd/v2/plugins"
+	"github.com/containerd/containerd/v2/plugins/snapshots/internal/metastore"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
@@ -206,40 +207,16 @@ func (s *snapshotter) Commit(ctx context.Context, name, key string, opts ...snap
 
 // Remove abandons the transaction identified by key. All resources
 // associated with the key will be removed.
-func (s *snapshotter) Remove(ctx context.Context, key string) (err error) {
-	var (
-		renamed, path string
-		restore       bool
-	)
-
-	err = s.ms.WithTransaction(ctx, true, func(ctx context.Context) error {
-		id, _, err := storage.Remove(ctx, key)
-		if err != nil {
-			return fmt.Errorf("failed to remove: %w", err)
-		}
-
-		path = s.getSnapshotDir(id)
-		renamed = s.getSnapshotDir("rm-" + id)
-		if err = os.Rename(path, renamed); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-
-		restore = true
-		return nil
-	})
+func (s *snapshotter) Remove(ctx context.Context, key string) error {
+	renamed, err := metastore.Remove(ctx, s.ms, key, s.getSnapshotDir)
 	if err != nil {
-		if restore { // failed to commit
-			if err1 := os.Rename(renamed, path); err1 != nil {
-				// May cause inconsistent data on disk
-				log.G(ctx).WithError(err1).WithField("path", renamed).Error("Failed to rename after failed commit")
-			}
-		}
 		return err
 	}
-
-	if err = os.RemoveAll(renamed); err != nil {
-		// Must be cleaned up, any "rm-*" could be removed if no active transactions
-		log.G(ctx).WithError(err).WithField("path", renamed).Warnf("Failed to remove root filesystem")
+	if renamed != "" {
+		if err := os.RemoveAll(renamed); err != nil {
+			// Must be cleaned up, any "rm-*" could be removed if no active transactions
+			log.G(ctx).WithError(err).WithField("path", renamed).Warnf("Failed to remove root filesystem")
+		}
 	}
 
 	return nil
