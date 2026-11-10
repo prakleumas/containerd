@@ -400,12 +400,11 @@ func (r *OCIRegistry) UnmarshalAny(ctx context.Context, sm streaming.StreamGette
 				writer = log.G(ctx).Writer()
 			}
 
-			go func() {
-				<-ctx.Done()
+			context.AfterFunc(ctx, func() {
 				if err := writer.Close(); err != nil {
 					log.G(ctx).Errorf("failed to close HTTP debug logs stream: %v", err)
 				}
-			}()
+			})
 
 			hostOptions.UpdateClient = func(client *http.Client) error {
 				switch s.Resolver.HttpDebug {
