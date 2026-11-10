@@ -591,9 +591,7 @@ func (p *PoolDevice) MarkDeviceState(ctx context.Context, name string, state Dev
 
 // WalkDevices iterates all devices in pool metadata
 func (p *PoolDevice) WalkDevices(ctx context.Context, cb func(info *DeviceInfo) error) error {
-	return p.metadata.WalkDevices(ctx, func(info *DeviceInfo) error {
-		return cb(info)
-	})
+	return p.metadata.WalkDevices(ctx, cb)
 }
 
 // Close closes pool device (thin-pool will not be removed)
