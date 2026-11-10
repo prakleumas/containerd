@@ -24,7 +24,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/containerd/containerd/v2/cmd/ctr/commands/pprof"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
@@ -33,125 +32,10 @@ import (
 )
 
 var pprofCommand = &cli.Command{
-	Name:  "pprof",
-	Usage: "Provide golang pprof outputs for containerd-shim",
-	Commands: []*cli.Command{
-		pprofBlockCommand,
-		pprofGoroutinesCommand,
-		pprofHeapCommand,
-		pprofProfileCommand,
-		pprofThreadcreateCommand,
-		pprofTraceCommand,
-	},
+	Name:                      "pprof",
+	Usage:                     "Provide golang pprof outputs for containerd-shim",
+	Commands:                  pprof.Commands(getPProfClient),
 	DisableSliceFlagSeparator: true,
-}
-
-var pprofGoroutinesCommand = &cli.Command{
-	Name:  "goroutines",
-	Usage: "Print goroutine stack dump",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Output format, value = 0: binary, value > 0: plaintext",
-			Value: 2,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return pprof.GoroutineProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofHeapCommand = &cli.Command{
-	Name:  "heap",
-	Usage: "Dump heap profile",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Output format, value = 0: binary, value > 0: plaintext",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return pprof.HeapProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofProfileCommand = &cli.Command{
-	Name:  "profile",
-	Usage: "CPU profile",
-	Flags: []cli.Flag{
-		&cli.DurationFlag{
-			Name:    "seconds",
-			Aliases: []string{"s"},
-			Usage:   "Duration for collection (seconds)",
-			Value:   30 * time.Second,
-		},
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Output format, value = 0: binary, value > 0: plaintext",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return pprof.CPUProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofTraceCommand = &cli.Command{
-	Name:  "trace",
-	Usage: "Collect execution trace",
-	Flags: []cli.Flag{
-		&cli.DurationFlag{
-			Name:    "seconds",
-			Aliases: []string{"s"},
-			Usage:   "Trace time (seconds)",
-			Value:   5 * time.Second,
-		},
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Output format, value = 0: binary, value > 0: plaintext",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return pprof.TraceProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofBlockCommand = &cli.Command{
-	Name:  "block",
-	Usage: "Goroutine blocking profile",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Output format, value = 0: binary, value > 0: plaintext",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return pprof.BlockProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofThreadcreateCommand = &cli.Command{
-	Name:  "threadcreate",
-	Usage: "Goroutine thread creating profile",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Output format, value = 0: binary, value > 0: plaintext",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return pprof.ThreadcreateProfile(cmd, getPProfClient)
-	},
 }
 
 func getPProfClient(cmd *cli.Command) (*http.Client, error) {

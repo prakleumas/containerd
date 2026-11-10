@@ -46,218 +46,68 @@ var Command = &cli.Command{
 		},
 	},
 	DisableSliceFlagSeparator: true,
-	Commands: []*cli.Command{
-		pprofBlockCommand,
-		pprofGoroutinesCommand,
-		pprofHeapCommand,
-		pprofProfileCommand,
-		pprofThreadcreateCommand,
-		pprofTraceCommand,
-	},
-}
-
-var pprofGoroutinesCommand = &cli.Command{
-	Name:  "goroutines",
-	Usage: "Dump goroutine stack dump",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Debug pprof args",
-			Value: 2,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return GoroutineProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofHeapCommand = &cli.Command{
-	Name:  "heap",
-	Usage: "Dump heap profile",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Debug pprof args",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return HeapProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofProfileCommand = &cli.Command{
-	Name:  "profile",
-	Usage: "CPU profile",
-	Flags: []cli.Flag{
-		&cli.DurationFlag{
-			Name:    "seconds",
-			Aliases: []string{"s"},
-			Usage:   "Duration for collection (seconds)",
-			Value:   30 * time.Second,
-		},
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Debug pprof args",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return CPUProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofTraceCommand = &cli.Command{
-	Name:  "trace",
-	Usage: "Collect execution trace",
-	Flags: []cli.Flag{
-		&cli.DurationFlag{
-			Name:    "seconds",
-			Aliases: []string{"s"},
-			Usage:   "Trace time (seconds)",
-			Value:   5 * time.Second,
-		},
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Debug pprof args",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return TraceProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofBlockCommand = &cli.Command{
-	Name:  "block",
-	Usage: "Goroutine blocking profile",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Debug pprof args",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return BlockProfile(cmd, getPProfClient)
-	},
-}
-
-var pprofThreadcreateCommand = &cli.Command{
-	Name:  "threadcreate",
-	Usage: "Goroutine thread creating profile",
-	Flags: []cli.Flag{
-		&cli.UintFlag{
-			Name:  "debug",
-			Usage: "Debug pprof args",
-			Value: 0,
-		},
-	},
-	DisableSliceFlagSeparator: true,
-	Action: func(ctx context.Context, cmd *cli.Command) error {
-		return ThreadcreateProfile(cmd, getPProfClient)
-	},
+	Commands:                  Commands(getPProfClient),
 }
 
 // Client is a func that returns a http client for a pprof server
 type Client func(cmd *cli.Command) (*http.Client, error)
 
-// GoroutineProfile dumps goroutine stack dump
-func GoroutineProfile(cmd *cli.Command, clientFunc Client) error {
-	client, err := clientFunc(cmd)
-	if err != nil {
-		return err
+// Commands returns the pprof subcommands, which fetch each profile from
+// the pprof server reached through the client that clientFunc returns.
+func Commands(clientFunc Client) []*cli.Command {
+	profiles := []struct {
+		name, usage, path string
+		debug             uint
+		seconds           time.Duration // zero for profiles without a duration
+		secondsUsage      string
+	}{
+		{name: "block", usage: "Goroutine blocking profile", path: "block"},
+		{name: "goroutines", usage: "Print goroutine stack dump", path: "goroutine", debug: 2},
+		{name: "heap", usage: "Dump heap profile", path: "heap"},
+		{name: "profile", usage: "CPU profile", path: "profile", seconds: 30 * time.Second, secondsUsage: "Duration for collection (seconds)"},
+		{name: "threadcreate", usage: "Goroutine thread creating profile", path: "threadcreate"},
+		{name: "trace", usage: "Collect execution trace", path: "trace", seconds: 5 * time.Second, secondsUsage: "Trace time (seconds)"},
 	}
-	debug := cmd.Uint("debug")
-	output, err := httpGetRequest(client, fmt.Sprintf("/debug/pprof/goroutine?debug=%d", debug))
-	if err != nil {
-		return err
+	cmds := make([]*cli.Command, 0, len(profiles))
+	for _, p := range profiles {
+		var flags []cli.Flag
+		if p.seconds != 0 {
+			flags = append(flags, &cli.DurationFlag{
+				Name:    "seconds",
+				Aliases: []string{"s"},
+				Usage:   p.secondsUsage,
+				Value:   p.seconds,
+			})
+		}
+		flags = append(flags, &cli.UintFlag{
+			Name:  "debug",
+			Usage: "Output format, value = 0: binary, value > 0: plaintext",
+			Value: p.debug,
+		})
+		cmds = append(cmds, &cli.Command{
+			Name:                      p.name,
+			Usage:                     p.usage,
+			Flags:                     flags,
+			DisableSliceFlagSeparator: true,
+			Action: func(ctx context.Context, cmd *cli.Command) error {
+				return dump(cmd, clientFunc, p.path, p.seconds != 0)
+			},
+		})
 	}
-	defer output.Close()
-	_, err = io.Copy(os.Stdout, output)
-	return err
+	return cmds
 }
 
-// HeapProfile dumps the heap profile
-func HeapProfile(cmd *cli.Command, clientFunc Client) error {
+// dump copies the profile at /debug/pprof/<path> to stdout.
+func dump(cmd *cli.Command, clientFunc Client, path string, timed bool) error {
 	client, err := clientFunc(cmd)
 	if err != nil {
 		return err
 	}
-	debug := cmd.Uint("debug")
-	output, err := httpGetRequest(client, fmt.Sprintf("/debug/pprof/heap?debug=%d", debug))
-	if err != nil {
-		return err
+	query := fmt.Sprintf("debug=%d", cmd.Uint("debug"))
+	if timed {
+		query = fmt.Sprintf("seconds=%v&%s", cmd.Duration("seconds").Seconds(), query)
 	}
-	defer output.Close()
-	_, err = io.Copy(os.Stdout, output)
-	return err
-}
-
-// CPUProfile dumps CPU profile
-func CPUProfile(cmd *cli.Command, clientFunc Client) error {
-	client, err := clientFunc(cmd)
-	if err != nil {
-		return err
-	}
-	seconds := cmd.Duration("seconds").Seconds()
-	debug := cmd.Uint("debug")
-	output, err := httpGetRequest(client, fmt.Sprintf("/debug/pprof/profile?seconds=%v&debug=%d", seconds, debug))
-	if err != nil {
-		return err
-	}
-	defer output.Close()
-	_, err = io.Copy(os.Stdout, output)
-	return err
-}
-
-// TraceProfile collects execution trace
-func TraceProfile(cmd *cli.Command, clientFunc Client) error {
-	client, err := clientFunc(cmd)
-	if err != nil {
-		return err
-	}
-	seconds := cmd.Duration("seconds").Seconds()
-	debug := cmd.Uint("debug")
-	uri := fmt.Sprintf("/debug/pprof/trace?seconds=%v&debug=%d", seconds, debug)
-	output, err := httpGetRequest(client, uri)
-	if err != nil {
-		return err
-	}
-	defer output.Close()
-	_, err = io.Copy(os.Stdout, output)
-	return err
-}
-
-// BlockProfile collects goroutine blocking profile
-func BlockProfile(cmd *cli.Command, clientFunc Client) error {
-	client, err := clientFunc(cmd)
-	if err != nil {
-		return err
-	}
-	debug := cmd.Uint("debug")
-	output, err := httpGetRequest(client, fmt.Sprintf("/debug/pprof/block?debug=%d", debug))
-	if err != nil {
-		return err
-	}
-	defer output.Close()
-	_, err = io.Copy(os.Stdout, output)
-	return err
-}
-
-// ThreadcreateProfile collects goroutine thread creating profile
-func ThreadcreateProfile(cmd *cli.Command, clientFunc Client) error {
-	client, err := clientFunc(cmd)
-	if err != nil {
-		return err
-	}
-	debug := cmd.Uint("debug")
-	output, err := httpGetRequest(client, fmt.Sprintf("/debug/pprof/threadcreate?debug=%d", debug))
+	output, err := httpGetRequest(client, "/debug/pprof/"+path+"?"+query)
 	if err != nil {
 		return err
 	}
