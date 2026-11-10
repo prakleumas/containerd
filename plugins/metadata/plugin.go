@@ -169,20 +169,11 @@ func init() {
 			path := filepath.Join(root, "meta.db")
 			ic.Meta.Exports["path"] = path
 
-			doneCh := make(chan struct{})
-			go func() {
-				t := time.NewTimer(10 * time.Second)
-				defer t.Stop()
-				select {
-				case <-t.C:
-					log.G(ic.Context).WithField("plugin", "bolt").Warn("waiting for response from boltdb open")
-				case <-doneCh:
-					return
-				}
-			}()
-
+			t := time.AfterFunc(10*time.Second, func() {
+				log.G(ic.Context).WithField("plugin", "bolt").Warn("waiting for response from boltdb open")
+			})
 			db, err := bolt.Open(path, 0644, &options)
-			close(doneCh)
+			t.Stop()
 			if err != nil {
 				return nil, err
 			}
