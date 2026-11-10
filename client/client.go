@@ -103,37 +103,14 @@ func init() {
 // New returns a new containerd client that is connected to the containerd
 // instance provided by address
 func New(address string, opts ...Opt) (*Client, error) {
-	var copts clientOpts
-	for _, o := range opts {
-		if err := o(&copts); err != nil {
-			return nil, err
-		}
+	c, copts, err := newClient(opts)
+	if err != nil {
+		return nil, err
 	}
 	if copts.timeout == 0 {
 		copts.timeout = 10 * time.Second
 	}
 
-	c := &Client{
-		defaultns: copts.defaultns,
-	}
-
-	if copts.defaultRuntime != "" {
-		c.defaults.runtime = copts.defaultRuntime
-	}
-
-	if copts.defaultSandboxer != "" {
-		c.defaults.sandboxer = copts.defaultSandboxer
-	}
-
-	if copts.defaultPlatform != nil {
-		c.platform = copts.defaultPlatform
-	} else {
-		c.platform = platforms.Default()
-	}
-
-	if copts.services != nil {
-		c.services = *copts.services
-	}
 	if address != "" {
 		backoffConfig := backoff.DefaultConfig
 		backoffConfig.MaxDelay = copts.timeout
@@ -186,15 +163,25 @@ func New(address string, opts ...Opt) (*Client, error) {
 // NewWithConn returns a new containerd client that is connected to the containerd
 // instance provided by the connection
 func NewWithConn(conn *grpc.ClientConn, opts ...Opt) (*Client, error) {
+	c, _, err := newClient(opts)
+	if err != nil {
+		return nil, err
+	}
+	c.conn = conn
+	return c, nil
+}
+
+// newClient applies opts and returns a Client configured from them, without
+// a connection, along with the applied options.
+func newClient(opts []Opt) (*Client, clientOpts, error) {
 	var copts clientOpts
 	for _, o := range opts {
 		if err := o(&copts); err != nil {
-			return nil, err
+			return nil, clientOpts{}, err
 		}
 	}
 	c := &Client{
 		defaultns: copts.defaultns,
-		conn:      conn,
 	}
 
 	if copts.defaultRuntime != "" {
@@ -214,7 +201,7 @@ func NewWithConn(conn *grpc.ClientConn, opts ...Opt) (*Client, error) {
 	if copts.services != nil {
 		c.services = *copts.services
 	}
-	return c, nil
+	return c, copts, nil
 }
 
 // Client is the client to interact with containerd and its various services
