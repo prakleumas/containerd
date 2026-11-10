@@ -55,7 +55,6 @@ func NewCollector(ns *metrics.Namespace) *Collector {
 	c.metrics = append(c.metrics, memoryMetrics...)
 	c.metrics = append(c.metrics, hugetlbMetrics...)
 	c.metrics = append(c.metrics, blkioMetrics...)
-	c.storedMetrics = make(chan prometheus.Metric, 100*len(c.metrics))
 	ns.Add(c)
 	return c
 }
@@ -74,8 +73,7 @@ type entry struct {
 // Collector provides the ability to collect container stats and export
 // them in the prometheus format
 type Collector struct {
-	ns            *metrics.Namespace
-	storedMetrics chan prometheus.Metric
+	ns *metrics.Namespace
 
 	// TODO(fuweid):
 	//
@@ -116,28 +114,13 @@ func (c *Collector) Collect(ch chan<- prometheus.Metric) {
 	c.mu.RLock()
 	wg := &sync.WaitGroup{}
 	for _, t := range c.tasks {
-		wg.Add(1)
-		go c.collect(t, ch, true, wg)
-	}
-storedLoop:
-	for {
-		// read stored metrics until the channel is flushed
-		select {
-		case m := <-c.storedMetrics:
-			ch <- m
-		default:
-			break storedLoop
-		}
+		wg.Go(func() { c.collect(t, ch) })
 	}
 	c.mu.RUnlock()
 	wg.Wait()
 }
 
-func (c *Collector) collect(entry entry, ch chan<- prometheus.Metric, block bool, wg *sync.WaitGroup) {
-	if wg != nil {
-		defer wg.Done()
-	}
-
+func (c *Collector) collect(entry entry, ch chan<- prometheus.Metric) {
 	t := entry.task
 	ctx, cancel := timeout.WithContext(context.Background(), cmetrics.ShimStatsRequestTimeout)
 	stats, err := t.Stats(namespaces.WithNamespace(ctx, t.Namespace()))
@@ -159,7 +142,7 @@ func (c *Collector) collect(entry entry, ch chan<- prometheus.Metric, block bool
 		ns = c.ns
 	}
 	for _, m := range c.metrics {
-		m.collect(t.ID(), t.Namespace(), s, ns, ch, block)
+		m.collect(t.ID(), t.Namespace(), s, ns, ch)
 	}
 }
 
