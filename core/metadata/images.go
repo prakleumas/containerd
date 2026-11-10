@@ -21,7 +21,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	eventstypes "github.com/containerd/containerd/api/events"
@@ -208,21 +207,8 @@ func (s *imageStore) Update(ctx context.Context, image images.Image, fieldpaths 
 
 		if len(fieldpaths) > 0 {
 			for _, path := range fieldpaths {
-				if strings.HasPrefix(path, "labels.") {
-					if updated.Labels == nil {
-						updated.Labels = map[string]string{}
-					}
-
-					key := strings.TrimPrefix(path, "labels.")
-					updated.Labels[key] = image.Labels[key]
-					continue
-				} else if strings.HasPrefix(path, "annotations.") {
-					if updated.Target.Annotations == nil {
-						updated.Target.Annotations = map[string]string{}
-					}
-
-					key := strings.TrimPrefix(path, "annotations.")
-					updated.Target.Annotations[key] = image.Target.Annotations[key]
+				if setMapKey(&updated.Labels, image.Labels, path, "labels.") ||
+					setMapKey(&updated.Target.Annotations, image.Target.Annotations, path, "annotations.") {
 					continue
 				}
 

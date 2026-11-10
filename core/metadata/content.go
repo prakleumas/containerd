@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -115,13 +114,7 @@ func (cs *contentStore) Update(ctx context.Context, info content.Info, fieldpath
 
 		if len(fieldpaths) > 0 {
 			for _, path := range fieldpaths {
-				if strings.HasPrefix(path, "labels.") {
-					if updated.Labels == nil {
-						updated.Labels = map[string]string{}
-					}
-
-					key := strings.TrimPrefix(path, "labels.")
-					updated.Labels[key] = info.Labels[key]
+				if setMapKey(&updated.Labels, info.Labels, path, "labels.") {
 					continue
 				}
 

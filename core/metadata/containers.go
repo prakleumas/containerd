@@ -19,7 +19,6 @@ package metadata
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/containerd/containerd/v2/core/containers"
@@ -32,7 +31,6 @@ import (
 	"github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/pkg/tracing"
 	"github.com/containerd/errdefs"
-	"github.com/containerd/typeurl/v2"
 	bolt "go.etcd.io/bbolt"
 	errbolt "go.etcd.io/bbolt/errors"
 )
@@ -228,21 +226,8 @@ func (s *containerStore) Update(ctx context.Context, container containers.Contai
 		// field mask rules in field_mask.proto. If you don't know what this
 		// is, do not update this code.
 		for _, path := range fieldpaths {
-			if strings.HasPrefix(path, "labels.") {
-				if updated.Labels == nil {
-					updated.Labels = map[string]string{}
-				}
-				key := strings.TrimPrefix(path, "labels.")
-				updated.Labels[key] = container.Labels[key]
-				continue
-			}
-
-			if strings.HasPrefix(path, "extensions.") {
-				if updated.Extensions == nil {
-					updated.Extensions = map[string]typeurl.Any{}
-				}
-				key := strings.TrimPrefix(path, "extensions.")
-				updated.Extensions[key] = container.Extensions[key]
+			if setMapKey(&updated.Labels, container.Labels, path, "labels.") ||
+				setMapKey(&updated.Extensions, container.Extensions, path, "extensions.") {
 				continue
 			}
 

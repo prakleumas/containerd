@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"strings"
 	"sync"
 	"time"
 
@@ -183,13 +182,7 @@ func (s *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 		// Handle field updates
 		if len(fieldpaths) > 0 {
 			for _, path := range fieldpaths {
-				if strings.HasPrefix(path, "labels.") {
-					if local.Labels == nil {
-						local.Labels = map[string]string{}
-					}
-
-					key := strings.TrimPrefix(path, "labels.")
-					local.Labels[key] = info.Labels[key]
+				if setMapKey(&local.Labels, info.Labels, path, "labels.") {
 					continue
 				}
 

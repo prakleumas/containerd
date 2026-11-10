@@ -175,3 +175,18 @@ func checkMap(fieldpath []string, m map[string]string) (string, bool) {
 	value, ok := m[strings.Join(fieldpath, ".")]
 	return value, ok
 }
+
+// setMapKey handles a field path of the form prefix+key. If path has the
+// prefix, it copies src[key] into *dst, allocating *dst if nil, and
+// returns true. A key missing from src is set to the zero value.
+func setMapKey[V any](dst *map[string]V, src map[string]V, path, prefix string) bool {
+	key, ok := strings.CutPrefix(path, prefix)
+	if !ok {
+		return false
+	}
+	if *dst == nil {
+		*dst = map[string]V{}
+	}
+	(*dst)[key] = src[key]
+	return true
+}

@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/containerd/containerd/v2/core/metadata/boltutil"
@@ -30,7 +29,6 @@ import (
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/tracing"
 	"github.com/containerd/errdefs"
-	"github.com/containerd/typeurl/v2"
 	"go.etcd.io/bbolt"
 	errbolt "go.etcd.io/bbolt/errors"
 )
@@ -127,21 +125,8 @@ func (s *sandboxStore) Update(ctx context.Context, sandbox api.Sandbox, fieldpat
 		}
 
 		for _, path := range fieldpaths {
-			if strings.HasPrefix(path, "labels.") {
-				if updated.Labels == nil {
-					updated.Labels = map[string]string{}
-				}
-
-				key := strings.TrimPrefix(path, "labels.")
-				updated.Labels[key] = sandbox.Labels[key]
-				continue
-			} else if strings.HasPrefix(path, "extensions.") {
-				if updated.Extensions == nil {
-					updated.Extensions = map[string]typeurl.Any{}
-				}
-
-				key := strings.TrimPrefix(path, "extensions.")
-				updated.Extensions[key] = sandbox.Extensions[key]
+			if setMapKey(&updated.Labels, sandbox.Labels, path, "labels.") ||
+				setMapKey(&updated.Extensions, sandbox.Extensions, path, "extensions.") {
 				continue
 			}
 
