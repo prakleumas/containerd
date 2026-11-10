@@ -19,6 +19,7 @@ package docker
 import (
 	"context"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/containerd/containerd/v2/core/content"
@@ -82,23 +83,14 @@ func appendDistributionSourceLabel(originLabel, repo string) string {
 	}
 	repos = append(repos, repo)
 
-	// use empty string to present duplicate items
-	for i := 1; i < len(repos); i++ {
-		tmp, j := repos[i], i-1
-		for ; j >= 0 && repos[j] >= tmp; j-- {
-			if repos[j] == tmp {
-				tmp = ""
-			}
-			repos[j+1] = repos[j]
-		}
-		repos[j+1] = tmp
+	slices.Sort(repos)
+	repos = slices.Compact(repos)
+	// an empty repo sorts first
+	if repos[0] == "" {
+		repos = repos[1:]
 	}
 
-	i := 0
-	for ; i < len(repos) && repos[i] == ""; i++ {
-	}
-
-	return strings.Join(repos[i:], ",")
+	return strings.Join(repos, ",")
 }
 
 func distributionSourceLabelKey(source string) string {
