@@ -25,6 +25,7 @@ import (
 	_ "crypto/sha512" // required for sha512 digest support
 	"fmt"
 	"io"
+	mrand "math/rand/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,7 +40,6 @@ import (
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/content/testsuite"
 	"github.com/containerd/containerd/v2/internal/fsverity"
-	"github.com/containerd/containerd/v2/internal/randutil"
 	"github.com/containerd/containerd/v2/pkg/testutil"
 
 	"github.com/opencontainers/go-digest"
@@ -322,7 +322,7 @@ func generateBlobs(t checker, nblobs, maxsize int64) map[digest.Digest][]byte {
 	blobs := map[digest.Digest][]byte{}
 
 	for range nblobs {
-		p := make([]byte, randutil.Int63n(maxsize))
+		p := make([]byte, mrand.Int64N(maxsize))
 
 		if _, err := rand.Read(p); err != nil {
 			t.Fatal(err)

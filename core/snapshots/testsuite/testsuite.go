@@ -21,6 +21,7 @@ import (
 	//nolint:revive // go-digest needs the blank import. See https://github.com/opencontainers/go-digest#usage.
 	_ "crypto/sha256"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,7 +36,6 @@ import (
 
 	"github.com/containerd/containerd/v2/core/mount/manager"
 	"github.com/containerd/containerd/v2/core/snapshots"
-	"github.com/containerd/containerd/v2/internal/randutil"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/pkg/testutil"
 )
@@ -857,7 +857,7 @@ func checkFileFromLowerLayer(ctx context.Context, t *testing.T, snapshotter snap
 }
 
 func closeTwice(ctx context.Context, t *testing.T, snapshotter snapshots.Snapshotter, work string) {
-	n := fmt.Sprintf("closeTwice-%d", randutil.Int())
+	n := fmt.Sprintf("closeTwice-%d", rand.Int())
 	prepare := fmt.Sprintf("%s-prepare", n)
 
 	// do some dummy ops to modify the snapshotter internal state

@@ -19,13 +19,13 @@ package mount
 import (
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
 
-	"github.com/containerd/containerd/v2/internal/randutil"
 	kernel "github.com/containerd/containerd/v2/pkg/kernelversion"
 )
 
@@ -180,7 +180,7 @@ func SetupLoop(backingFile string, param LoopParams) (*os.File, error) {
 			// with EBUSY when trying to set it up.
 			if strings.Contains(err.Error(), ebusyString) {
 				// Fallback a bit to avoid live lock
-				time.Sleep(time.Millisecond * time.Duration(randutil.Intn(retry*10)))
+				time.Sleep(time.Millisecond * time.Duration(rand.IntN(retry*10)))
 				continue
 			}
 			return nil, err
