@@ -48,7 +48,6 @@ type Store struct {
 	imageLabels   map[string]string
 	platforms     []ocispec.Platform
 	allMetadata   bool
-	labelMap      func(ocispec.Descriptor) []string
 	manifestLimit int
 
 	// extraReferences are used to store or lookup multiple references
@@ -197,7 +196,7 @@ func (is *Store) ImageFilter(h images.HandlerFunc, cs content.Store) images.Hand
 	} else {
 		p = platforms.Ordered(is.platforms...)
 	}
-	h = images.SetChildrenMappedLabels(cs, h, is.labelMap)
+	h = images.SetChildrenLabels(cs, h)
 	if is.allMetadata {
 		// Filter manifests by platforms but allow to handle manifest
 		// and configuration for not-target platforms
