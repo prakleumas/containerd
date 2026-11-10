@@ -60,16 +60,7 @@ func TestContainerLogWithoutTailingNewLine(t *testing.T) {
 	require.NoError(t, runtimeService.StartContainer(cn))
 
 	t.Log("Wait for container to finish running")
-	require.NoError(t, Eventually(func() (bool, error) {
-		s, err := runtimeService.ContainerStatus(cn)
-		if err != nil {
-			return false, err
-		}
-		if s.GetState() == runtime.ContainerState_CONTAINER_EXITED {
-			return true, nil
-		}
-		return false, nil
-	}, time.Second, 30*time.Second))
+	waitContainerExited(t, cn)
 
 	t.Log("Check container log")
 	content, err := os.ReadFile(filepath.Join(testPodLogDir, containerName))
@@ -115,16 +106,7 @@ func TestLongContainerLog(t *testing.T) {
 	require.NoError(t, runtimeService.StartContainer(cn))
 
 	t.Log("Wait for container to finish running")
-	require.NoError(t, Eventually(func() (bool, error) {
-		s, err := runtimeService.ContainerStatus(cn)
-		if err != nil {
-			return false, err
-		}
-		if s.GetState() == runtime.ContainerState_CONTAINER_EXITED {
-			return true, nil
-		}
-		return false, nil
-	}, time.Second, 30*time.Second))
+	waitContainerExited(t, cn)
 
 	t.Log("Check container log")
 	content, err := os.ReadFile(filepath.Join(testPodLogDir, containerName))

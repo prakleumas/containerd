@@ -227,16 +227,7 @@ func TestKillShimPublishesTaskExitAndDeleteEventsForContainer(t *testing.T) {
 	}
 
 	// Wait for the container to exit and ensure it is fully cleaned up.
-	require.NoError(t, Eventually(func() (bool, error) {
-		s, err := runtimeService.ContainerStatus(cnID)
-		if err != nil {
-			return false, err
-		}
-		if s.State == runtime.ContainerState_CONTAINER_EXITED {
-			return true, nil
-		}
-		return false, nil
-	}, 1000*time.Millisecond, 30*time.Second))
+	waitContainerExited(t, cnID)
 }
 
 func TestKillShimPreservesExitStatusForMultipleContainers(t *testing.T) {

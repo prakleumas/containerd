@@ -645,6 +645,19 @@ func Eventually(f CheckFunc, period, timeout time.Duration) error {
 	}
 }
 
+// waitContainerExited waits up to 30 seconds for container cn to reach
+// the exited state, and fails the test if it does not.
+func waitContainerExited(t *testing.T, cn string) {
+	t.Helper()
+	require.NoError(t, Eventually(func() (bool, error) {
+		s, err := runtimeService.ContainerStatus(cn)
+		if err != nil {
+			return false, err
+		}
+		return s.GetState() == runtime.ContainerState_CONTAINER_EXITED, nil
+	}, time.Second, 30*time.Second))
+}
+
 // Consistently makes sure that f consistently returns true without
 // error before timeout exceeds. If f returns error, Consistently
 // will return the same error immediately.

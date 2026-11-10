@@ -21,12 +21,10 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"testing"
-	"time"
 
 	"github.com/containerd/containerd/v2/integration/images"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func createRegularFile(basePath, content string) (string, error) {
@@ -126,16 +124,7 @@ func TestContainerSymlinkVolumes(t *testing.T) {
 			require.NoError(t, runtimeService.StartContainer(cn))
 
 			t.Log("Wait for container to finish running")
-			require.NoError(t, Eventually(func() (bool, error) {
-				s, err := runtimeService.ContainerStatus(cn)
-				if err != nil {
-					return false, err
-				}
-				if s.GetState() == runtime.ContainerState_CONTAINER_EXITED {
-					return true, nil
-				}
-				return false, nil
-			}, time.Second, 30*time.Second))
+			waitContainerExited(t, cn)
 
 			output, err := os.ReadFile(filepath.Join(testPodLogDir, containerName))
 			assert.NoError(t, err)
