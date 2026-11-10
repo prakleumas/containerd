@@ -17,6 +17,7 @@
 package opts
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -80,32 +81,33 @@ func WithProcessArgs(config *runtime.ContainerConfig, image *imagespec.ImageConf
 	}
 }
 
-// mounts defines how to sort runtime.Mount.
-// This is the same with the Docker implementation:
+// mergeMounts merges CRI mounts with extra mounts. If a mount destination is
+// mounted by both a CRI mount and an extra mount, the CRI mount is kept.
+// Destinations are compared after applying clean to both.
+//
+// The result is sorted by the number of parts in the destination (a/b/c
+// would be 3 parts), keeping the input order on ties. This ensures that high
+// level mounts don't shadow other mounts. This is the same with the Docker
+// implementation:
 //
 //	https://github.com/moby/moby/blob/17.05.x/daemon/volumes.go#L26
-type orderedMounts []*runtime.Mount
+func mergeMounts(criMounts, extra []*runtime.Mount, clean func(string) string) []*runtime.Mount {
+	mounts := append([]*runtime.Mount{}, criMounts...)
+	for _, e := range extra {
+		if !slices.ContainsFunc(criMounts, func(c *runtime.Mount) bool {
+			return clean(e.ContainerPath) == clean(c.ContainerPath)
+		}) {
+			mounts = append(mounts, e)
+		}
+	}
 
-// Len returns the number of mounts. Used in sorting.
-func (m orderedMounts) Len() int {
-	return len(m)
-}
-
-// Less returns true if the number of parts (a/b/c would be 3 parts) in the
-// mount indexed by parameter 1 is less than that of the mount indexed by
-// parameter 2. Used in sorting.
-func (m orderedMounts) Less(i, j int) bool {
-	return m.parts(i) < m.parts(j)
-}
-
-// Swap swaps two items in an array of mounts. Used in sorting
-func (m orderedMounts) Swap(i, j int) {
-	m[i], m[j] = m[j], m[i]
-}
-
-// parts returns the number of parts in the destination of a mount. Used in sorting.
-func (m orderedMounts) parts(i int) int {
-	return strings.Count(filepath.Clean(m[i].ContainerPath), string(os.PathSeparator))
+	parts := func(m *runtime.Mount) int {
+		return strings.Count(filepath.Clean(m.ContainerPath), string(os.PathSeparator))
+	}
+	slices.SortStableFunc(mounts, func(a, b *runtime.Mount) int {
+		return cmp.Compare(parts(a), parts(b))
+	})
+	return mounts
 }
 
 // WithAnnotation sets the provided annotation

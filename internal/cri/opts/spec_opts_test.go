@@ -17,7 +17,7 @@
 package opts
 
 import (
-	"sort"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,6 +41,5 @@ func TestOrderedMounts(t *testing.T) {
 		{ContainerPath: "/a/b/c"},
 		{ContainerPath: "/a/b/c/d"},
 	}
-	sort.Stable(orderedMounts(mounts))
-	assert.Equal(t, expected, mounts)
+	assert.Equal(t, expected, mergeMounts(mounts, nil, filepath.Clean))
 }

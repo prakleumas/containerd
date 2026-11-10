@@ -24,7 +24,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -43,30 +42,7 @@ import (
 
 func withMounts(osi osinterface.OS, config *runtime.ContainerConfig, extra []*runtime.Mount, mountLabel string, handler *runtime.RuntimeHandler, cgroupWritable bool) oci.SpecOpts {
 	return func(ctx context.Context, client oci.Client, _ *containers.Container, s *runtimespec.Spec) (err error) {
-		// mergeMounts merge CRI mounts with extra mounts. If a mount destination
-		// is mounted by both a CRI mount and an extra mount, the CRI mount will
-		// be kept.
-		var (
-			criMounts = config.GetMounts()
-			mounts    = append([]*runtime.Mount{}, criMounts...)
-		)
-		// Copy all mounts from extra mounts, except for mounts overridden by CRI.
-		for _, e := range extra {
-			found := false
-			for _, c := range criMounts {
-				if filepath.Clean(e.ContainerPath) == filepath.Clean(c.ContainerPath) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				mounts = append(mounts, e)
-			}
-		}
-
-		// Sort mounts in number of parts. This ensures that high level mounts don't
-		// shadow other mounts.
-		sort.Stable(orderedMounts(mounts))
+		mounts := mergeMounts(config.GetMounts(), extra, filepath.Clean)
 
 		mode := "ro"
 		if cgroupWritable {

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
@@ -34,31 +33,7 @@ import (
 // WithDarwinMounts adds mounts from CRI's container config + extra mounts.
 func WithDarwinMounts(osi osinterface.OS, config *runtime.ContainerConfig, extra []*runtime.Mount) oci.SpecOpts {
 	return func(ctx context.Context, client oci.Client, container *containers.Container, s *oci.Spec) error {
-		// mergeMounts merge CRI mounts with extra mounts. If a mount destination
-		// is mounted by both a CRI mount and an extra mount, the CRI mount will
-		// be kept.
-		var (
-			criMounts = config.GetMounts()
-			mounts    = append([]*runtime.Mount{}, criMounts...)
-		)
-
-		// Copy all mounts from extra mounts, except for mounts overridden by CRI.
-		for _, e := range extra {
-			found := false
-			for _, c := range criMounts {
-				if cleanMount(e.ContainerPath) == cleanMount(c.ContainerPath) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				mounts = append(mounts, e)
-			}
-		}
-
-		// Sort mounts in number of parts. This ensures that high level mounts don't
-		// shadow other mounts.
-		sort.Stable(orderedMounts(mounts))
+		mounts := mergeMounts(config.GetMounts(), extra, cleanMount)
 
 		// Copy all mounts from default mounts, except for
 		// - mounts overridden by supplied mount;

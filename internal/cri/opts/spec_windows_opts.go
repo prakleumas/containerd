@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/containerd/containerd/v2/core/containers"
@@ -106,30 +105,7 @@ func parseMount(osi osinterface.OS, mount *runtime.Mount) (*runtimespec.Mount, e
 // windows container.
 func WithWindowsMounts(osi osinterface.OS, config *runtime.ContainerConfig, extra []*runtime.Mount) oci.SpecOpts {
 	return func(ctx context.Context, client oci.Client, _ *containers.Container, s *runtimespec.Spec) error {
-		// mergeMounts merge CRI mounts with extra mounts. If a mount destination
-		// is mounted by both a CRI mount and an extra mount, the CRI mount will
-		// be kept.
-		var (
-			criMounts = config.GetMounts()
-			mounts    = append([]*runtime.Mount{}, criMounts...)
-		)
-		// Copy all mounts from extra mounts, except for mounts overridden by CRI.
-		for _, e := range extra {
-			found := false
-			for _, c := range criMounts {
-				if cleanMount(e.ContainerPath) == cleanMount(c.ContainerPath) {
-					found = true
-					break
-				}
-			}
-			if !found {
-				mounts = append(mounts, e)
-			}
-		}
-
-		// Sort mounts in number of parts. This ensures that high level mounts don't
-		// shadow other mounts.
-		sort.Stable(orderedMounts(mounts))
+		mounts := mergeMounts(config.GetMounts(), extra, cleanMount)
 
 		// Copy all mounts from default mounts, except for
 		// mounts overridden by supplied mount;
