@@ -79,31 +79,7 @@ func init() {
 				return nil, fmt.Errorf("grpc address cannot be empty: %w", errdefs.ErrInvalidArgument)
 			}
 
-			var (
-				streamOpts              = []grpc.StreamServerInterceptor{streamNamespaceInterceptor}
-				unaryOpts               = []grpc.UnaryServerInterceptor{unaryNamespaceInterceptor}
-				serverOpts              = []grpc.ServerOption{}
-				prometheusServerMetrics *grpc_prometheus.ServerMetrics // This should be grpc handler
-			)
-
-			if p, err := ic.GetByID(plugins.MetricsPlugin, "grpc-prometheus"); err == nil {
-				prometheusServerMetrics = p.(*grpc_prometheus.ServerMetrics)
-				streamOpts = append(streamOpts, prometheusServerMetrics.StreamServerInterceptor())
-				unaryOpts = append(unaryOpts, prometheusServerMetrics.UnaryServerInterceptor())
-			}
-
-			if p, err := ic.GetByID(plugins.MetricsPlugin, "grpc-otel"); err == nil {
-				serverOpts = append(serverOpts, grpc.StatsHandler(p.(stats.Handler)))
-			}
-
-			serverOpts = append(serverOpts, grpc.ChainStreamInterceptor(streamOpts...))
-			serverOpts = append(serverOpts, grpc.ChainUnaryInterceptor(unaryOpts...))
-			if c.MaxRecvMsgSize > 0 {
-				serverOpts = append(serverOpts, grpc.MaxRecvMsgSize(c.MaxRecvMsgSize))
-			}
-			if c.MaxSendMsgSize > 0 {
-				serverOpts = append(serverOpts, grpc.MaxSendMsgSize(c.MaxSendMsgSize))
-			}
+			serverOpts, prometheusServerMetrics := serverOptions(ic, c.MaxRecvMsgSize, c.MaxSendMsgSize)
 
 			// grpcService allows GRPC services to be registered with the underlying server
 			type grpcService interface {
@@ -156,32 +132,7 @@ func init() {
 				return nil, plugin.ErrSkipPlugin
 			}
 
-			var (
-				streamOpts              = []grpc.StreamServerInterceptor{streamNamespaceInterceptor}
-				unaryOpts               = []grpc.UnaryServerInterceptor{unaryNamespaceInterceptor}
-				serverOpts              = []grpc.ServerOption{}
-				prometheusServerMetrics *grpc_prometheus.ServerMetrics // This should be grpc handler
-			)
-
-			if p, err := ic.GetByID(plugins.MetricsPlugin, "grpc-prometheus"); err == nil {
-				prometheusServerMetrics = p.(*grpc_prometheus.ServerMetrics)
-				streamOpts = append(streamOpts, prometheusServerMetrics.StreamServerInterceptor())
-				unaryOpts = append(unaryOpts, prometheusServerMetrics.UnaryServerInterceptor())
-			}
-
-			if p, err := ic.GetByID(plugins.MetricsPlugin, "grpc-otel"); err == nil {
-				serverOpts = append(serverOpts, grpc.StatsHandler(p.(stats.Handler)))
-			}
-
-			serverOpts = append(serverOpts, grpc.ChainStreamInterceptor(streamOpts...))
-			serverOpts = append(serverOpts, grpc.ChainUnaryInterceptor(unaryOpts...))
-
-			if c.MaxRecvMsgSize > 0 {
-				serverOpts = append(serverOpts, grpc.MaxRecvMsgSize(c.MaxRecvMsgSize))
-			}
-			if c.MaxSendMsgSize > 0 {
-				serverOpts = append(serverOpts, grpc.MaxSendMsgSize(c.MaxSendMsgSize))
-			}
+			serverOpts, prometheusServerMetrics := serverOptions(ic, c.MaxRecvMsgSize, c.MaxSendMsgSize)
 
 			if c.TLSCert != "" {
 				log.G(ic.Context).Info("setting up tls on tcp GRPC services...")
@@ -254,6 +205,37 @@ func init() {
 			}, nil
 		},
 	})
+}
+
+// serverOptions returns the options shared by the local and TCP GRPC
+// servers, and the grpc-prometheus metrics if that plugin is loaded.
+func serverOptions(ic *plugin.InitContext, maxRecvMsgSize, maxSendMsgSize int) ([]grpc.ServerOption, *grpc_prometheus.ServerMetrics) {
+	var (
+		streamOpts              = []grpc.StreamServerInterceptor{streamNamespaceInterceptor}
+		unaryOpts               = []grpc.UnaryServerInterceptor{unaryNamespaceInterceptor}
+		serverOpts              = []grpc.ServerOption{}
+		prometheusServerMetrics *grpc_prometheus.ServerMetrics // This should be grpc handler
+	)
+
+	if p, err := ic.GetByID(plugins.MetricsPlugin, "grpc-prometheus"); err == nil {
+		prometheusServerMetrics = p.(*grpc_prometheus.ServerMetrics)
+		streamOpts = append(streamOpts, prometheusServerMetrics.StreamServerInterceptor())
+		unaryOpts = append(unaryOpts, prometheusServerMetrics.UnaryServerInterceptor())
+	}
+
+	if p, err := ic.GetByID(plugins.MetricsPlugin, "grpc-otel"); err == nil {
+		serverOpts = append(serverOpts, grpc.StatsHandler(p.(stats.Handler)))
+	}
+
+	serverOpts = append(serverOpts, grpc.ChainStreamInterceptor(streamOpts...))
+	serverOpts = append(serverOpts, grpc.ChainUnaryInterceptor(unaryOpts...))
+	if maxRecvMsgSize > 0 {
+		serverOpts = append(serverOpts, grpc.MaxRecvMsgSize(maxRecvMsgSize))
+	}
+	if maxSendMsgSize > 0 {
+		serverOpts = append(serverOpts, grpc.MaxSendMsgSize(maxSendMsgSize))
+	}
+	return serverOpts, prometheusServerMetrics
 }
 
 type grpcServer struct {
