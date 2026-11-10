@@ -146,10 +146,7 @@ func (lm *leaseManager) List(ctx context.Context, fs ...string) ([]leases.Lease,
 			return nil
 		}
 
-		return topbkt.ForEach(func(k, v []byte) error {
-			if v != nil {
-				return nil
-			}
+		return topbkt.ForEachBucket(func(k []byte) error {
 			txbkt := topbkt.Bucket(k)
 
 			l := leases.Lease{
@@ -309,11 +306,7 @@ func (lm *leaseManager) ListResources(ctx context.Context, lease leases.Lease) (
 
 		// snapshot resources
 		if sbkt := topbkt.Bucket(bucketKeyObjectSnapshots); sbkt != nil {
-			if err := sbkt.ForEach(func(sk, sv []byte) error {
-				if sv != nil {
-					return nil
-				}
-
+			if err := sbkt.ForEachBucket(func(sk []byte) error {
 				snbkt := sbkt.Bucket(sk)
 				return snbkt.ForEach(func(k, _ []byte) error {
 					rs = append(rs, leases.Resource{

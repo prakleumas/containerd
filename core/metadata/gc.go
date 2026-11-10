@@ -560,10 +560,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 
 		lbkt := nbkt.Bucket(bucketKeyObjectLeases)
 		if lbkt != nil {
-			if err := lbkt.ForEach(func(k, v []byte) error {
-				if v != nil {
-					return nil
-				}
+			if err := lbkt.ForEachBucket(func(k []byte) error {
 				libkt := lbkt.Bucket(k)
 				var flat bool
 
@@ -614,10 +611,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 
 				sbkt := libkt.Bucket(bucketKeyObjectSnapshots)
 				if sbkt != nil {
-					if err := sbkt.ForEach(func(sk, sv []byte) error {
-						if sv != nil {
-							return nil
-						}
+					if err := sbkt.ForEachBucket(func(sk []byte) error {
 						snbkt := sbkt.Bucket(sk)
 
 						return snbkt.ForEach(func(k, v []byte) error {
@@ -664,11 +658,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 
 		ibkt := nbkt.Bucket(bucketKeyObjectImages)
 		if ibkt != nil {
-			if err := ibkt.ForEach(func(k, v []byte) error {
-				if v != nil {
-					return nil
-				}
-
+			if err := ibkt.ForEachBucket(func(k []byte) error {
 				if !isExpiredImage(ctx, k, ibkt.Bucket(k), expThreshold) {
 					fn(gcnode(ResourceImage, ns, string(k)))
 					// Non-expired images are roots, so regular fn/bref refs are
@@ -705,10 +695,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 		if cbkt != nil {
 			ibkt := cbkt.Bucket(bucketKeyObjectIngests)
 			if ibkt != nil {
-				if err := ibkt.ForEach(func(k, v []byte) error {
-					if v != nil {
-						return nil
-					}
+				if err := ibkt.ForEachBucket(func(k []byte) error {
 					ea, err := readExpireAt(ibkt.Bucket(k))
 					if err != nil {
 						return err
@@ -724,11 +711,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 			}
 			cbkt = cbkt.Bucket(bucketKeyObjectBlob)
 			if cbkt != nil {
-				if err := cbkt.ForEach(func(k, v []byte) error {
-					if v != nil {
-						return nil
-					}
-
+				if err := cbkt.ForEachBucket(func(k []byte) error {
 					return c.sendLabelRefs(ns, cbkt.Bucket(k), labelRefCallbacks{
 						bref: func(n gc.Node) {
 							bref(n, gcnode(ResourceContent, ns, string(k)))
@@ -748,11 +731,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 
 		cbkt = nbkt.Bucket(bucketKeyObjectContainers)
 		if cbkt != nil {
-			if err := cbkt.ForEach(func(k, v []byte) error {
-				if v != nil {
-					return nil
-				}
-
+			if err := cbkt.ForEachBucket(func(k []byte) error {
 				fn(gcnode(ResourceContainer, ns, string(k)))
 
 				return c.sendLabelRefs(ns, cbkt.Bucket(k), labelRefCallbacks{
@@ -767,17 +746,10 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 
 		sbkt := nbkt.Bucket(bucketKeyObjectSnapshots)
 		if sbkt != nil {
-			if err := sbkt.ForEach(func(sk, sv []byte) error {
-				if sv != nil {
-					return nil
-				}
+			if err := sbkt.ForEachBucket(func(sk []byte) error {
 				snbkt := sbkt.Bucket(sk)
 
-				return snbkt.ForEach(func(k, v []byte) error {
-					if v != nil {
-						return nil
-					}
-
+				return snbkt.ForEachBucket(func(k []byte) error {
 					return c.sendLabelRefs(ns, snbkt.Bucket(k), labelRefCallbacks{
 						bref: func(n gc.Node) {
 							bref(n, gcnode(ResourceSnapshot, ns, fmt.Sprintf("%s/%s", sk, k)))
@@ -797,11 +769,7 @@ func (c *gcContext) scanRoots(ctx context.Context, tx *bolt.Tx, nc chan<- gc.Nod
 
 		bbkt := nbkt.Bucket(bucketKeyObjectSandboxes)
 		if bbkt != nil {
-			if err := bbkt.ForEach(func(k, v []byte) error {
-				if v != nil {
-					return nil
-				}
-
+			if err := bbkt.ForEachBucket(func(k []byte) error {
 				sbbkt := bbkt.Bucket(k)
 
 				return c.sendLabelRefs(ns, sbbkt, labelRefCallbacks{fn: fn})
@@ -951,10 +919,7 @@ func (c *gcContext) scanAll(ctx context.Context, tx *bolt.Tx, fn func(ctx contex
 
 		lbkt := nbkt.Bucket(bucketKeyObjectLeases)
 		if lbkt != nil {
-			if err := lbkt.ForEach(func(k, v []byte) error {
-				if v != nil {
-					return nil
-				}
+			if err := lbkt.ForEachBucket(func(k []byte) error {
 				return fn(ctx, gcnode(ResourceLease, ns, string(k)))
 			}); err != nil {
 				return err
@@ -963,15 +928,9 @@ func (c *gcContext) scanAll(ctx context.Context, tx *bolt.Tx, fn func(ctx contex
 
 		sbkt := nbkt.Bucket(bucketKeyObjectSnapshots)
 		if sbkt != nil {
-			if err := sbkt.ForEach(func(sk, sv []byte) error {
-				if sv != nil {
-					return nil
-				}
+			if err := sbkt.ForEachBucket(func(sk []byte) error {
 				snbkt := sbkt.Bucket(sk)
-				return snbkt.ForEach(func(k, v []byte) error {
-					if v != nil {
-						return nil
-					}
+				return snbkt.ForEachBucket(func(k []byte) error {
 					node := gcnode(ResourceSnapshot, ns, fmt.Sprintf("%s/%s", sk, k))
 					return fn(ctx, node)
 				})
@@ -984,10 +943,7 @@ func (c *gcContext) scanAll(ctx context.Context, tx *bolt.Tx, fn func(ctx contex
 		if cbkt != nil {
 			ibkt := cbkt.Bucket(bucketKeyObjectIngests)
 			if ibkt != nil {
-				if err := ibkt.ForEach(func(k, v []byte) error {
-					if v != nil {
-						return nil
-					}
+				if err := ibkt.ForEachBucket(func(k []byte) error {
 					node := gcnode(ResourceIngest, ns, string(k))
 					return fn(ctx, node)
 				}); err != nil {
@@ -997,10 +953,7 @@ func (c *gcContext) scanAll(ctx context.Context, tx *bolt.Tx, fn func(ctx contex
 
 			cbkt = cbkt.Bucket(bucketKeyObjectBlob)
 			if cbkt != nil {
-				if err := cbkt.ForEach(func(k, v []byte) error {
-					if v != nil {
-						return nil
-					}
+				if err := cbkt.ForEachBucket(func(k []byte) error {
 					node := gcnode(ResourceContent, ns, string(k))
 					return fn(ctx, node)
 				}); err != nil {
@@ -1011,10 +964,7 @@ func (c *gcContext) scanAll(ctx context.Context, tx *bolt.Tx, fn func(ctx contex
 
 		ibkt := nbkt.Bucket(bucketKeyObjectImages)
 		if ibkt != nil {
-			if err := ibkt.ForEach(func(k, v []byte) error {
-				if v != nil {
-					return nil
-				}
+			if err := ibkt.ForEachBucket(func(k []byte) error {
 				node := gcnode(ResourceImage, ns, string(k))
 				return fn(ctx, node)
 			}); err != nil {

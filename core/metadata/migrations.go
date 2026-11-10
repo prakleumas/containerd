@@ -82,17 +82,11 @@ func addChildLinks(tx *bolt.Tx) error {
 		sbkt := nbkt.Bucket(bucketKeyObjectSnapshots)
 		if sbkt != nil {
 			// Iterate through each snapshotter
-			if err := sbkt.ForEach(func(sk, sv []byte) error {
-				if sv != nil {
-					return nil
-				}
+			if err := sbkt.ForEachBucket(func(sk []byte) error {
 				snbkt := sbkt.Bucket(sk)
 
 				// Iterate through each snapshot
-				return snbkt.ForEach(func(k, v []byte) error {
-					if v != nil {
-						return nil
-					}
+				return snbkt.ForEachBucket(func(k []byte) error {
 					parent := snbkt.Bucket(k).Get(bucketKeyParent)
 					if len(parent) > 0 {
 						pbkt := snbkt.Bucket(parent)
