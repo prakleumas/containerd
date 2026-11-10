@@ -24,6 +24,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/containerd/log"
@@ -444,18 +445,11 @@ func compactLowerdirOption(opts []string) (string, []string) {
 // findOverlayLowerdirs returns the index of lowerdir in mount's options and
 // all the lowerdir target.
 func findOverlayLowerdirs(opts []string) (int, []string) {
-	var (
-		idx    = -1
-		prefix = "lowerdir="
-	)
+	const prefix = "lowerdir="
 
-	for i, opt := range opts {
-		if strings.HasPrefix(opt, prefix) {
-			idx = i
-			break
-		}
-	}
-
+	idx := slices.IndexFunc(opts, func(opt string) bool {
+		return strings.HasPrefix(opt, prefix)
+	})
 	if idx == -1 {
 		return -1, nil
 	}
@@ -471,15 +465,7 @@ func longestCommonPrefix(strs []string) string {
 	}
 
 	// find out the min/max value by alphabetical order
-	min, max := strs[0], strs[0]
-	for _, str := range strs[1:] {
-		if min > str {
-			min = str
-		}
-		if max < str {
-			max = str
-		}
-	}
+	min, max := slices.Min(strs), slices.Max(strs)
 
 	// find out the common part between min and max
 	for i := 0; i < len(min) && i < len(max); i++ {
@@ -495,10 +481,7 @@ func copyOptions(opts []string) []string {
 	if len(opts) == 0 {
 		return nil
 	}
-
-	acopy := make([]string, len(opts))
-	copy(acopy, opts)
-	return acopy
+	return slices.Clone(opts)
 }
 
 // optionsSize returns the byte size of options of mount.

@@ -19,7 +19,9 @@
 package mount
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 
 	"github.com/moby/sys/mountinfo"
 )
@@ -40,12 +42,8 @@ func Lookup(dir string) (Info, error) {
 	}
 
 	// find the longest matching mount point
-	var idx, maxlen int
-	for i := range m {
-		if len(m[i].Mountpoint) > maxlen {
-			maxlen = len(m[i].Mountpoint)
-			idx = i
-		}
-	}
-	return *m[idx], nil
+	longest := slices.MaxFunc(m, func(a, b *mountinfo.Info) int {
+		return cmp.Compare(len(a.Mountpoint), len(b.Mountpoint))
+	})
+	return *longest, nil
 }

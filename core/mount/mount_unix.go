@@ -19,9 +19,10 @@
 package mount
 
 import (
+	"cmp"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/moby/sys/mountinfo"
@@ -48,20 +49,16 @@ func UnmountRecursive(target string, flags int) error {
 		return err
 	}
 
-	targetSet := make(map[string]struct{})
+	targets := make([]string, 0, len(mounts))
 	for _, m := range mounts {
-		targetSet[m.Mountpoint] = struct{}{}
-	}
-
-	var targets []string
-	for m := range targetSet {
-		targets = append(targets, m)
+		targets = append(targets, m.Mountpoint)
 	}
 
 	// Make the deepest mount be first
-	sort.SliceStable(targets, func(i, j int) bool {
-		return len(targets[i]) > len(targets[j])
+	slices.SortFunc(targets, func(a, b string) int {
+		return cmp.Or(cmp.Compare(len(b), len(a)), cmp.Compare(a, b))
 	})
+	targets = slices.Compact(targets)
 
 	for i, target := range targets {
 		if err := UnmountAll(target, flags); err != nil {
