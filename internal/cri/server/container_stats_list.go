@@ -313,12 +313,9 @@ func matchLabelSelector(selector, labels map[string]string) bool {
 	return true
 }
 
-func (c *criService) windowsContainerMetrics(
-	meta containerstore.Metadata,
-	stats *types.Metric,
-	snapshotter string,
-) (containerStats, error) {
-	var cs runtime.ContainerStats
+// newContainerStats returns container stats holding the writable layer
+// usage and the container attributes.
+func (c *criService) newContainerStats(meta containerstore.Metadata, snapshotter string) *runtime.ContainerStats {
 	var usedBytes, inodesUsed uint64
 	sn, err := c.GetSnapshot(meta.ID, snapshotter)
 	// If snapshotstore doesn't have cached snapshot information
@@ -327,20 +324,30 @@ func (c *criService) windowsContainerMetrics(
 		usedBytes = sn.Size
 		inodesUsed = sn.Inodes
 	}
-	cs.WritableLayer = &runtime.FilesystemUsage{
-		Timestamp: sn.Timestamp,
-		FsId: &runtime.FilesystemIdentifier{
-			Mountpoint: c.imageFSPaths[snapshotter],
+	return &runtime.ContainerStats{
+		WritableLayer: &runtime.FilesystemUsage{
+			Timestamp: sn.Timestamp,
+			FsId: &runtime.FilesystemIdentifier{
+				Mountpoint: c.imageFSPaths[snapshotter],
+			},
+			UsedBytes:  &runtime.UInt64Value{Value: usedBytes},
+			InodesUsed: &runtime.UInt64Value{Value: inodesUsed},
 		},
-		UsedBytes:  &runtime.UInt64Value{Value: usedBytes},
-		InodesUsed: &runtime.UInt64Value{Value: inodesUsed},
+		Attributes: &runtime.ContainerAttributes{
+			Id:          meta.ID,
+			Metadata:    meta.Config.GetMetadata(),
+			Labels:      meta.Config.GetLabels(),
+			Annotations: meta.Config.GetAnnotations(),
+		},
 	}
-	cs.Attributes = &runtime.ContainerAttributes{
-		Id:          meta.ID,
-		Metadata:    meta.Config.GetMetadata(),
-		Labels:      meta.Config.GetLabels(),
-		Annotations: meta.Config.GetAnnotations(),
-	}
+}
+
+func (c *criService) windowsContainerMetrics(
+	meta containerstore.Metadata,
+	stats *types.Metric,
+	snapshotter string,
+) (containerStats, error) {
+	cs := c.newContainerStats(meta, snapshotter)
 
 	if stats != nil {
 		s, err := typeurl.UnmarshalAny(stats.Data)
@@ -369,7 +376,7 @@ func (c *criService) windowsContainerMetrics(
 			}
 		}
 	}
-	return containerStats{&cs, 0}, nil
+	return containerStats{cs, 0}, nil
 }
 
 func (c *criService) linuxContainerMetrics(
@@ -377,32 +384,11 @@ func (c *criService) linuxContainerMetrics(
 	stats *types.Metric,
 	snapshotter string,
 ) (containerStats, error) {
-	var cs runtime.ContainerStats
-	var usedBytes, inodesUsed, pids uint64
-	sn, err := c.GetSnapshot(meta.ID, snapshotter)
-	// If snapshotstore doesn't have cached snapshot information
-	// set WritableLayer usage to zero
-	if err == nil {
-		usedBytes = sn.Size
-		inodesUsed = sn.Inodes
-	}
-	cs.WritableLayer = &runtime.FilesystemUsage{
-		Timestamp: sn.Timestamp,
-		FsId: &runtime.FilesystemIdentifier{
-			Mountpoint: c.imageFSPaths[snapshotter],
-		},
-		UsedBytes:  &runtime.UInt64Value{Value: usedBytes},
-		InodesUsed: &runtime.UInt64Value{Value: inodesUsed},
-	}
-	cs.Attributes = &runtime.ContainerAttributes{
-		Id:          meta.ID,
-		Metadata:    meta.Config.GetMetadata(),
-		Labels:      meta.Config.GetLabels(),
-		Annotations: meta.Config.GetAnnotations(),
-	}
+	cs := c.newContainerStats(meta, snapshotter)
+	var pids uint64
 
 	if stats == nil {
-		return containerStats{&cs, pids}, nil
+		return containerStats{cs, pids}, nil
 	}
 
 	taskMetricsAny, err := typeurl.UnmarshalAny(stats.Data)
@@ -443,7 +429,7 @@ func (c *criService) linuxContainerMetrics(
 	// IO stats (only has PSI for cgroupv2)
 	cs.Io = c.ioContainerStats(metrics, protobuf.FromTimestamp(stats.Timestamp))
 
-	return containerStats{&cs, pids}, nil
+	return containerStats{cs, pids}, nil
 }
 
 // getWorkingSet calculates workingset memory from cgroup memory stats.
