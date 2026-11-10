@@ -27,25 +27,17 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var (
-	pidfdSupported     bool
-	pidfdSupportedOnce sync.Once
-)
+var pidfdSupported = sync.OnceValue(func() bool {
+	if err := checkPidFD(); err != nil {
+		log.G(context.Background()).WithError(err).Error("failed to ensure the kernel supports pidfd")
+		return false
+	}
+	return true
+})
 
 // SupportsPidFD returns true if current kernel supports pidfd.
 func SupportsPidFD() bool {
-	pidfdSupportedOnce.Do(func() {
-		logger := log.G(context.Background())
-
-		if err := checkPidFD(); err != nil {
-			logger.WithError(err).Error("failed to ensure the kernel supports pidfd")
-
-			pidfdSupported = false
-			return
-		}
-		pidfdSupported = true
-	})
-	return pidfdSupported
+	return pidfdSupported()
 }
 
 func checkPidFD() error {
