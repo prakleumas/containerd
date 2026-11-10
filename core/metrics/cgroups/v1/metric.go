@@ -42,14 +42,14 @@ type metric struct {
 	getValues func(stats *v1.Metrics) []value
 }
 
-func (m *metric) desc(ns *metrics.Namespace) *prometheus.Desc {
+func (m *metric) Desc(ns *metrics.Namespace) *prometheus.Desc {
 	// the namespace label is for containerd namespaces
 	return ns.NewDesc(m.name, m.help, m.unit, append([]string{IDName, "namespace"}, m.labels...)...)
 }
 
-func (m *metric) collect(id, namespace string, stats *v1.Metrics, ns *metrics.Namespace, ch chan<- prometheus.Metric) {
+func (m *metric) Collect(id, namespace string, stats *v1.Metrics, ns *metrics.Namespace, ch chan<- prometheus.Metric) {
 	values := m.getValues(stats)
 	for _, v := range values {
-		ch <- prometheus.MustNewConstMetric(m.desc(ns), m.vt, v.v, append([]string{id, namespace}, v.l...)...)
+		ch <- prometheus.MustNewConstMetric(m.Desc(ns), m.vt, v.v, append([]string{id, namespace}, v.l...)...)
 	}
 }
