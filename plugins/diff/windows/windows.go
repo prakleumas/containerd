@@ -20,8 +20,6 @@ package windows
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"time"
@@ -40,10 +38,8 @@ import (
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/pkg/archive"
-	"github.com/containerd/containerd/v2/pkg/archive/compression"
-	"github.com/containerd/containerd/v2/pkg/epoch"
-	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/containerd/containerd/v2/plugins"
+	"github.com/containerd/containerd/v2/plugins/diff/internal/layerwriter"
 )
 
 func init() {
@@ -174,65 +170,14 @@ func (s windowsDiff) Apply(ctx context.Context, desc ocispec.Descriptor, mounts 
 func (s windowsDiff) Compare(ctx context.Context, lower, upper []mount.Mount, opts ...diff.Opt) (d ocispec.Descriptor, err error) {
 	t1 := time.Now()
 
-	var config diff.Config
-	for _, opt := range opts {
-		if err := opt(&config); err != nil {
-			return emptyDesc, err
-		}
-	}
-	if tm := epoch.FromContext(ctx); tm != nil && config.SourceDateEpoch == nil {
-		config.SourceDateEpoch = tm
-	}
-
 	layers, err := mountPairToLayerStack(lower, upper)
 	if err != nil {
 		return emptyDesc, err
 	}
 
-	if config.MediaType == "" {
-		config.MediaType = ocispec.MediaTypeImageLayerGzip
-	}
-
-	compressionType := compression.Uncompressed
-	switch config.MediaType {
-	case ocispec.MediaTypeImageLayer:
-	case ocispec.MediaTypeImageLayerGzip:
-		compressionType = compression.Gzip
-	case ocispec.MediaTypeImageLayerZstd:
-		compressionType = compression.Zstd
-	default:
-		return emptyDesc, fmt.Errorf("unsupported diff media type: %v: %w", config.MediaType, errdefs.ErrNotImplemented)
-	}
-
-	newReference := false
-	if config.Reference == "" {
-		newReference = true
-		config.Reference = uniqueRef()
-	}
-
-	cw, err := s.store.Writer(ctx, content.WithRef(config.Reference), content.WithDescriptor(ocispec.Descriptor{
-		MediaType: config.MediaType,
-	}))
-
+	config, err := layerwriter.Prepare(ctx, opts...)
 	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to open writer: %w", err)
-	}
-
-	defer func() {
-		if err != nil {
-			cw.Close()
-			if newReference {
-				if abortErr := s.store.Abort(ctx, config.Reference); abortErr != nil {
-					log.G(ctx).WithError(abortErr).WithField("ref", config.Reference).Warnf("failed to delete diff upload")
-				}
-			}
-		}
-	}()
-
-	if !newReference {
-		if err = cw.Truncate(0); err != nil {
-			return emptyDesc, err
-		}
+		return emptyDesc, err
 	}
 
 	// TODO darrenstahlmsft: When this is done isolated, we should disable this.
@@ -243,60 +188,11 @@ func (s windowsDiff) Compare(ctx context.Context, lower, upper []mount.Mount, op
 		return emptyDesc, err
 	}
 
-	if compressionType != compression.Uncompressed {
-		dgstr := digest.SHA256.Digester()
-		var compressed io.WriteCloser
-		compressed, err = compression.CompressStream(cw, compressionType)
-		if err != nil {
-			return emptyDesc, fmt.Errorf("failed to get compressed stream: %w", err)
-		}
-		err = archive.WriteDiff(ctx, io.MultiWriter(compressed, dgstr.Hash()), "", layers[0], archive.AsWindowsContainerLayerPair(), archive.WithParentLayers(layers[1:]))
-		compressed.Close()
-		if err != nil {
-			return emptyDesc, fmt.Errorf("failed to write compressed diff: %w", err)
-		}
-
-		if config.Labels == nil {
-			config.Labels = map[string]string{}
-		}
-		config.Labels[labels.LabelUncompressed] = dgstr.Digest().String()
-	} else {
-		if err = archive.WriteDiff(ctx, cw, "", layers[0], archive.AsWindowsContainerLayerPair(), archive.WithParentLayers(layers[1:])); err != nil {
-			return emptyDesc, fmt.Errorf("failed to write diff: %w", err)
-		}
-	}
-
-	var commitopts []content.Opt
-	if config.Labels != nil {
-		commitopts = append(commitopts, content.WithLabels(config.Labels))
-	}
-
-	dgst := cw.Digest()
-	if err := cw.Commit(ctx, 0, dgst, commitopts...); err != nil {
-		if !errdefs.IsAlreadyExists(err) {
-			return emptyDesc, fmt.Errorf("failed to commit: %w", err)
-		}
-	}
-
-	info, err := s.store.Info(ctx, dgst)
+	desc, err := layerwriter.Write(ctx, s.store, config, func(w io.Writer) error {
+		return archive.WriteDiff(ctx, w, "", layers[0], archive.AsWindowsContainerLayerPair(), archive.WithParentLayers(layers[1:]))
+	})
 	if err != nil {
-		return emptyDesc, fmt.Errorf("failed to get info from content store: %w", err)
-	}
-	if info.Labels == nil {
-		info.Labels = make(map[string]string)
-	}
-	// Set "containerd.io/uncompressed" label if digest already existed without label
-	if _, ok := info.Labels[labels.LabelUncompressed]; !ok {
-		info.Labels[labels.LabelUncompressed] = config.Labels[labels.LabelUncompressed]
-		if _, err := s.store.Update(ctx, info, "labels."+labels.LabelUncompressed); err != nil {
-			return emptyDesc, fmt.Errorf("error setting uncompressed label: %w", err)
-		}
-	}
-
-	desc := ocispec.Descriptor{
-		MediaType: config.MediaType,
-		Size:      info.Size,
-		Digest:    info.Digest,
+		return emptyDesc, err
 	}
 
 	log.G(ctx).WithFields(log.Fields{
@@ -397,12 +293,4 @@ func mountPairToLayerStack(lower, upper []mount.Mount) ([]string, error) {
 	}
 
 	return append([]string{upperLayer}, upperParentLayerPaths...), nil
-}
-
-func uniqueRef() string {
-	t := time.Now()
-	var b [3]byte
-	// Ignore read failures, just decreases uniqueness
-	rand.Read(b[:])
-	return fmt.Sprintf("%d-%s", t.UnixNano(), base64.URLEncoding.EncodeToString(b[:]))
 }
