@@ -17,9 +17,11 @@
 package docker
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"net/http"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -117,27 +119,17 @@ func Register(group string, descriptor ErrorDescriptor) ErrorCode {
 	return descriptor.Code
 }
 
-type byValue []ErrorDescriptor
-
-func (a byValue) Len() int           { return len(a) }
-func (a byValue) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a byValue) Less(i, j int) bool { return a[i].Value < a[j].Value }
+func compareValue(a, b ErrorDescriptor) int { return cmp.Compare(a.Value, b.Value) }
 
 // GetGroupNames returns the list of Error group names that are registered
 func GetGroupNames() []string {
-	keys := []string{}
-
-	for k := range groupToDescriptors {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return slices.Sorted(maps.Keys(groupToDescriptors))
 }
 
 // GetErrorCodeGroup returns the named group of error descriptors
 func GetErrorCodeGroup(name string) []ErrorDescriptor {
 	desc := groupToDescriptors[name]
-	sort.Sort(byValue(desc))
+	slices.SortFunc(desc, compareValue)
 	return desc
 }
 
@@ -149,6 +141,6 @@ func GetErrorAllDescriptors() []ErrorDescriptor {
 	for _, group := range GetGroupNames() {
 		result = append(result, GetErrorCodeGroup(group)...)
 	}
-	sort.Sort(byValue(result))
+	slices.SortFunc(result, compareValue)
 	return result
 }
