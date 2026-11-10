@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	goruntime "runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -220,12 +221,10 @@ func (c *criService) validateTargetContainer(sandboxID, targetContainerID string
 
 // isInCRIMounts checks whether a destination is in CRI mount list.
 func isInCRIMounts(dst string, mounts []*runtime.Mount) bool {
-	for _, m := range mounts {
-		if filepath.Clean(m.ContainerPath) == filepath.Clean(dst) {
-			return true
-		}
-	}
-	return false
+	dst = filepath.Clean(dst)
+	return slices.ContainsFunc(mounts, func(m *runtime.Mount) bool {
+		return filepath.Clean(m.ContainerPath) == dst
+	})
 }
 
 // filterLabel returns a label filter. Use `%q` here because containerd
@@ -603,32 +602,5 @@ func sameUsernsConfig(a, b *runtime.UserNamespace) bool {
 		return false
 	}
 
-	if !sameMapping(aUids, bUids) {
-		return false
-	}
-	if !sameMapping(aGids, bGids) {
-		return false
-	}
-	return true
-}
-
-// sameMapping checks if the mappings are the same. If the mappings are the same
-// but in different order, it returns false.
-func sameMapping(a, b []runtimespec.LinuxIDMapping) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for x := range a {
-		if a[x].ContainerID != b[x].ContainerID {
-			return false
-		}
-		if a[x].HostID != b[x].HostID {
-			return false
-		}
-		if a[x].Size != b[x].Size {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(aUids, bUids) && slices.Equal(aGids, bGids)
 }
