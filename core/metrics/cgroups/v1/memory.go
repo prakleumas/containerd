@@ -19,778 +19,94 @@
 package v1
 
 import (
+	cgroup1stats "github.com/containerd/cgroups/v3/cgroup1/stats"
 	v1 "github.com/containerd/containerd/v2/core/metrics/types/v1"
 	metrics "github.com/docker/go-metrics"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
 var memoryMetrics = []*metric{
-	{
-		name: "memory_cache",
-		help: "The cache amount used",
-		unit: metrics.Bytes,
+	memGauge("memory_cache", "The cache amount used", metrics.Bytes, (*v1.MemoryStat).GetCache),
+	memGauge("memory_rss", "The rss amount used", metrics.Bytes, (*v1.MemoryStat).GetRSS),
+	memGauge("memory_rss_huge", "The rss_huge amount used", metrics.Bytes, (*v1.MemoryStat).GetRSSHuge),
+	memGauge("memory_mapped_file", "The mapped_file amount used", metrics.Bytes, (*v1.MemoryStat).GetMappedFile),
+	memGauge("memory_dirty", "The dirty amount", metrics.Bytes, (*v1.MemoryStat).GetDirty),
+	memGauge("memory_writeback", "The writeback amount", metrics.Bytes, (*v1.MemoryStat).GetWriteback),
+	memGauge("memory_pgpgin", "The pgpgin amount", metrics.Bytes, (*v1.MemoryStat).GetPgPgIn),
+	memGauge("memory_pgpgout", "The pgpgout amount", metrics.Bytes, (*v1.MemoryStat).GetPgPgOut),
+	memGauge("memory_pgfault", "The pgfault amount", metrics.Bytes, (*v1.MemoryStat).GetPgFault),
+	memGauge("memory_pgmajfault", "The pgmajfault amount", metrics.Bytes, (*v1.MemoryStat).GetPgMajFault),
+	memGauge("memory_inactive_anon", "The inactive_anon amount", metrics.Bytes, (*v1.MemoryStat).GetInactiveAnon),
+	memGauge("memory_active_anon", "The active_anon amount", metrics.Bytes, (*v1.MemoryStat).GetActiveAnon),
+	memGauge("memory_inactive_file", "The inactive_file amount", metrics.Bytes, (*v1.MemoryStat).GetInactiveFile),
+	memGauge("memory_active_file", "The active_file amount", metrics.Bytes, (*v1.MemoryStat).GetActiveFile),
+	memGauge("memory_unevictable", "The unevictable amount", metrics.Bytes, (*v1.MemoryStat).GetUnevictable),
+	memGauge("memory_hierarchical_memory_limit", "The hierarchical_memory_limit amount", metrics.Bytes, (*v1.MemoryStat).GetHierarchicalMemoryLimit),
+	memGauge("memory_hierarchical_memsw_limit", "The hierarchical_memsw_limit amount", metrics.Bytes, (*v1.MemoryStat).GetHierarchicalSwapLimit),
+	memGauge("memory_total_cache", "The total_cache amount used", metrics.Bytes, (*v1.MemoryStat).GetTotalCache),
+	memGauge("memory_total_rss", "The total_rss amount used", metrics.Bytes, (*v1.MemoryStat).GetTotalRSS),
+	memGauge("memory_total_rss_huge", "The total_rss_huge amount used", metrics.Bytes, (*v1.MemoryStat).GetTotalRSSHuge),
+	memGauge("memory_total_mapped_file", "The total_mapped_file amount used", metrics.Bytes, (*v1.MemoryStat).GetTotalMappedFile),
+	memGauge("memory_total_dirty", "The total_dirty amount", metrics.Bytes, (*v1.MemoryStat).GetTotalDirty),
+	memGauge("memory_total_writeback", "The total_writeback amount", metrics.Bytes, (*v1.MemoryStat).GetTotalWriteback),
+	memGauge("memory_total_pgpgin", "The total_pgpgin amount", metrics.Bytes, (*v1.MemoryStat).GetTotalPgPgIn),
+	memGauge("memory_total_pgpgout", "The total_pgpgout amount", metrics.Bytes, (*v1.MemoryStat).GetTotalPgPgOut),
+	memGauge("memory_total_pgfault", "The total_pgfault amount", metrics.Bytes, (*v1.MemoryStat).GetTotalPgFault),
+	memGauge("memory_total_pgmajfault", "The total_pgmajfault amount", metrics.Bytes, (*v1.MemoryStat).GetTotalPgMajFault),
+	memGauge("memory_total_inactive_anon", "The total_inactive_anon amount", metrics.Bytes, (*v1.MemoryStat).GetTotalInactiveAnon),
+	memGauge("memory_total_active_anon", "The total_active_anon amount", metrics.Bytes, (*v1.MemoryStat).GetTotalActiveAnon),
+	memGauge("memory_total_inactive_file", "The total_inactive_file amount", metrics.Bytes, (*v1.MemoryStat).GetTotalInactiveFile),
+	memGauge("memory_total_active_file", "The total_active_file amount", metrics.Bytes, (*v1.MemoryStat).GetTotalActiveFile),
+	memGauge("memory_total_unevictable", "The total_unevictable amount", metrics.Bytes, (*v1.MemoryStat).GetTotalUnevictable),
+	memEntryGauge("memory_usage_failcnt", "The usage failcnt", metrics.Total, (*v1.MemoryStat).GetUsage, (*cgroup1stats.MemoryEntry).GetFailcnt),
+	memEntryGauge("memory_usage_limit", "The memory limit", metrics.Bytes, (*v1.MemoryStat).GetUsage, (*cgroup1stats.MemoryEntry).GetLimit),
+	memEntryGauge("memory_usage_max", "The memory maximum usage", metrics.Bytes, (*v1.MemoryStat).GetUsage, (*cgroup1stats.MemoryEntry).GetMax),
+	memEntryGauge("memory_usage_usage", "The memory usage", metrics.Bytes, (*v1.MemoryStat).GetUsage, (*cgroup1stats.MemoryEntry).GetUsage),
+	memEntryGauge("memory_swap_failcnt", "The swap failcnt", metrics.Total, (*v1.MemoryStat).GetSwap, (*cgroup1stats.MemoryEntry).GetFailcnt),
+	memEntryGauge("memory_swap_limit", "The swap limit", metrics.Bytes, (*v1.MemoryStat).GetSwap, (*cgroup1stats.MemoryEntry).GetLimit),
+	memEntryGauge("memory_swap_max", "The swap maximum usage", metrics.Bytes, (*v1.MemoryStat).GetSwap, (*cgroup1stats.MemoryEntry).GetMax),
+	memEntryGauge("memory_swap_usage", "The swap usage", metrics.Bytes, (*v1.MemoryStat).GetSwap, (*cgroup1stats.MemoryEntry).GetUsage),
+	memEntryGauge("memory_kernel_failcnt", "The kernel failcnt", metrics.Total, (*v1.MemoryStat).GetKernel, (*cgroup1stats.MemoryEntry).GetFailcnt),
+	memEntryGauge("memory_kernel_limit", "The kernel limit", metrics.Bytes, (*v1.MemoryStat).GetKernel, (*cgroup1stats.MemoryEntry).GetLimit),
+	memEntryGauge("memory_kernel_max", "The kernel maximum usage", metrics.Bytes, (*v1.MemoryStat).GetKernel, (*cgroup1stats.MemoryEntry).GetMax),
+	memEntryGauge("memory_kernel_usage", "The kernel usage", metrics.Bytes, (*v1.MemoryStat).GetKernel, (*cgroup1stats.MemoryEntry).GetUsage),
+	memEntryGauge("memory_kerneltcp_failcnt", "The kerneltcp failcnt", metrics.Total, (*v1.MemoryStat).GetKernelTCP, (*cgroup1stats.MemoryEntry).GetFailcnt),
+	memEntryGauge("memory_kerneltcp_limit", "The kerneltcp limit", metrics.Bytes, (*v1.MemoryStat).GetKernelTCP, (*cgroup1stats.MemoryEntry).GetLimit),
+	memEntryGauge("memory_kerneltcp_max", "The kerneltcp maximum usage", metrics.Bytes, (*v1.MemoryStat).GetKernelTCP, (*cgroup1stats.MemoryEntry).GetMax),
+	memEntryGauge("memory_kerneltcp_usage", "The kerneltcp usage", metrics.Bytes, (*v1.MemoryStat).GetKernelTCP, (*cgroup1stats.MemoryEntry).GetUsage),
+}
+
+// memGauge returns a gauge that reports the value get reads from the memory
+// stats, and no value when the memory stats are absent.
+func memGauge(name, help string, unit metrics.Unit, get func(*v1.MemoryStat) uint64) *metric {
+	return &metric{
+		name: name,
+		help: help,
+		unit: unit,
 		vt:   prometheus.GaugeValue,
 		getValues: func(stats *v1.Metrics) []value {
 			if stats.Memory == nil {
 				return nil
 			}
-			return []value{
-				{
-					v: float64(stats.Memory.Cache),
-				},
-			}
+			return []value{{v: float64(get(stats.Memory))}}
 		},
-	},
-	{
-		name: "memory_rss",
-		help: "The rss amount used",
-		unit: metrics.Bytes,
+	}
+}
+
+// memEntryGauge returns a gauge that reports the value get reads from the
+// memory entry that entry selects, and no value when that entry is absent.
+func memEntryGauge(name, help string, unit metrics.Unit, entry func(*v1.MemoryStat) *cgroup1stats.MemoryEntry, get func(*cgroup1stats.MemoryEntry) uint64) *metric {
+	return &metric{
+		name: name,
+		help: help,
+		unit: unit,
 		vt:   prometheus.GaugeValue,
 		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
+			e := entry(stats.GetMemory())
+			if e == nil {
 				return nil
 			}
-			return []value{
-				{
-					v: float64(stats.Memory.RSS),
-				},
-			}
+			return []value{{v: float64(get(e))}}
 		},
-	},
-	{
-		name: "memory_rss_huge",
-		help: "The rss_huge amount used",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.RSSHuge),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_mapped_file",
-		help: "The mapped_file amount used",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.MappedFile),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_dirty",
-		help: "The dirty amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Dirty),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_writeback",
-		help: "The writeback amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Writeback),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_pgpgin",
-		help: "The pgpgin amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.PgPgIn),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_pgpgout",
-		help: "The pgpgout amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.PgPgOut),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_pgfault",
-		help: "The pgfault amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.PgFault),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_pgmajfault",
-		help: "The pgmajfault amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.PgMajFault),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_inactive_anon",
-		help: "The inactive_anon amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.InactiveAnon),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_active_anon",
-		help: "The active_anon amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.ActiveAnon),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_inactive_file",
-		help: "The inactive_file amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.InactiveFile),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_active_file",
-		help: "The active_file amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.ActiveFile),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_unevictable",
-		help: "The unevictable amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Unevictable),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_hierarchical_memory_limit",
-		help: "The hierarchical_memory_limit amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.HierarchicalMemoryLimit),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_hierarchical_memsw_limit",
-		help: "The hierarchical_memsw_limit amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.HierarchicalSwapLimit),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_cache",
-		help: "The total_cache amount used",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalCache),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_rss",
-		help: "The total_rss amount used",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalRSS),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_rss_huge",
-		help: "The total_rss_huge amount used",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalRSSHuge),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_mapped_file",
-		help: "The total_mapped_file amount used",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalMappedFile),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_dirty",
-		help: "The total_dirty amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalDirty),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_writeback",
-		help: "The total_writeback amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalWriteback),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_pgpgin",
-		help: "The total_pgpgin amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalPgPgIn),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_pgpgout",
-		help: "The total_pgpgout amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalPgPgOut),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_pgfault",
-		help: "The total_pgfault amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalPgFault),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_pgmajfault",
-		help: "The total_pgmajfault amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalPgMajFault),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_inactive_anon",
-		help: "The total_inactive_anon amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalInactiveAnon),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_active_anon",
-		help: "The total_active_anon amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalActiveAnon),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_inactive_file",
-		help: "The total_inactive_file amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalInactiveFile),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_active_file",
-		help: "The total_active_file amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalActiveFile),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_total_unevictable",
-		help: "The total_unevictable amount",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.Memory == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.TotalUnevictable),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_usage_failcnt",
-		help: "The usage failcnt",
-		unit: metrics.Total,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetUsage() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Usage.Failcnt),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_usage_limit",
-		help: "The memory limit",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetUsage() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Usage.Limit),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_usage_max",
-		help: "The memory maximum usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetUsage() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Usage.Max),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_usage_usage",
-		help: "The memory usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetUsage() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Usage.Usage),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_swap_failcnt",
-		help: "The swap failcnt",
-		unit: metrics.Total,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetSwap() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Swap.Failcnt),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_swap_limit",
-		help: "The swap limit",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetSwap() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Swap.Limit),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_swap_max",
-		help: "The swap maximum usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetSwap() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Swap.Max),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_swap_usage",
-		help: "The swap usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetSwap() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Swap.Usage),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kernel_failcnt",
-		help: "The kernel failcnt",
-		unit: metrics.Total,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernel() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Kernel.Failcnt),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kernel_limit",
-		help: "The kernel limit",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernel() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Kernel.Limit),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kernel_max",
-		help: "The kernel maximum usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernel() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Kernel.Max),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kernel_usage",
-		help: "The kernel usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernel() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.Kernel.Usage),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kerneltcp_failcnt",
-		help: "The kerneltcp failcnt",
-		unit: metrics.Total,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernelTCP() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.KernelTCP.Failcnt),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kerneltcp_limit",
-		help: "The kerneltcp limit",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernelTCP() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.KernelTCP.Limit),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kerneltcp_max",
-		help: "The kerneltcp maximum usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernelTCP() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.KernelTCP.Max),
-				},
-			}
-		},
-	},
-	{
-		name: "memory_kerneltcp_usage",
-		help: "The kerneltcp usage",
-		unit: metrics.Bytes,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.GetMemory().GetKernelTCP() == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Memory.KernelTCP.Usage),
-				},
-			}
-		},
-	},
+	}
 }

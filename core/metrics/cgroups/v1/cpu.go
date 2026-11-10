@@ -27,54 +27,9 @@ import (
 )
 
 var cpuMetrics = []*metric{
-	{
-		name: "cpu_total",
-		help: "The total cpu time",
-		unit: metrics.Nanoseconds,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.CPU == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.CPU.Usage.Total),
-				},
-			}
-		},
-	},
-	{
-		name: "cpu_kernel",
-		help: "The total kernel cpu time",
-		unit: metrics.Nanoseconds,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.CPU == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.CPU.Usage.Kernel),
-				},
-			}
-		},
-	},
-	{
-		name: "cpu_user",
-		help: "The total user cpu time",
-		unit: metrics.Nanoseconds,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.CPU == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.CPU.Usage.User),
-				},
-			}
-		},
-	},
+	cpuGauge("cpu_total", "The total cpu time", metrics.Nanoseconds, func(s *v1.CPUStat) uint64 { return s.Usage.Total }),
+	cpuGauge("cpu_kernel", "The total kernel cpu time", metrics.Nanoseconds, func(s *v1.CPUStat) uint64 { return s.Usage.Kernel }),
+	cpuGauge("cpu_user", "The total user cpu time", metrics.Nanoseconds, func(s *v1.CPUStat) uint64 { return s.Usage.User }),
 	{
 		name:   "per_cpu",
 		help:   "The total cpu time per cpu",
@@ -95,52 +50,24 @@ var cpuMetrics = []*metric{
 			return out
 		},
 	},
-	{
-		name: "cpu_throttle_periods",
-		help: "The total cpu throttle periods",
-		unit: metrics.Total,
+	cpuGauge("cpu_throttle_periods", "The total cpu throttle periods", metrics.Total, func(s *v1.CPUStat) uint64 { return s.Throttling.Periods }),
+	cpuGauge("cpu_throttled_periods", "The total cpu throttled periods", metrics.Total, func(s *v1.CPUStat) uint64 { return s.Throttling.ThrottledPeriods }),
+	cpuGauge("cpu_throttled_time", "The total cpu throttled time", metrics.Nanoseconds, func(s *v1.CPUStat) uint64 { return s.Throttling.ThrottledTime }),
+}
+
+// cpuGauge returns a gauge that reports the value get reads from the CPU
+// stats, and no value when the CPU stats are absent.
+func cpuGauge(name, help string, unit metrics.Unit, get func(*v1.CPUStat) uint64) *metric {
+	return &metric{
+		name: name,
+		help: help,
+		unit: unit,
 		vt:   prometheus.GaugeValue,
 		getValues: func(stats *v1.Metrics) []value {
 			if stats.CPU == nil {
 				return nil
 			}
-			return []value{
-				{
-					v: float64(stats.CPU.Throttling.Periods),
-				},
-			}
+			return []value{{v: float64(get(stats.CPU))}}
 		},
-	},
-	{
-		name: "cpu_throttled_periods",
-		help: "The total cpu throttled periods",
-		unit: metrics.Total,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.CPU == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.CPU.Throttling.ThrottledPeriods),
-				},
-			}
-		},
-	},
-	{
-		name: "cpu_throttled_time",
-		help: "The total cpu throttled time",
-		unit: metrics.Nanoseconds,
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v1.Metrics) []value {
-			if stats.CPU == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.CPU.Throttling.ThrottledTime),
-				},
-			}
-		},
-	},
+	}
 }
