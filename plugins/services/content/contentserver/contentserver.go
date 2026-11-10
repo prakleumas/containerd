@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/core/content/proxy"
 	"github.com/containerd/containerd/v2/pkg/protobuf"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 )
@@ -73,7 +74,7 @@ func (s *service) Info(ctx context.Context, req *api.InfoRequest) (*api.InfoResp
 	}
 
 	return &api.InfoResponse{
-		Info: infoToGRPC(bi),
+		Info: proxy.InfoToProto(bi),
 	}, nil
 }
 
@@ -83,13 +84,13 @@ func (s *service) Update(ctx context.Context, req *api.UpdateRequest) (*api.Upda
 		return nil, status.Errorf(codes.InvalidArgument, "%q failed validation", req.Info.Digest)
 	}
 
-	info, err := s.store.Update(ctx, infoFromGRPC(req.Info), req.UpdateMask.GetPaths()...)
+	info, err := s.store.Update(ctx, proxy.InfoFromProto(req.Info), req.UpdateMask.GetPaths()...)
 	if err != nil {
 		return nil, errgrpc.ToGRPC(err)
 	}
 
 	return &api.UpdateResponse{
-		Info: infoToGRPC(info),
+		Info: proxy.InfoToProto(info),
 	}, nil
 }
 
@@ -105,7 +106,7 @@ func (s *service) List(req *api.ListContentRequest, session api.Content_ListServ
 	)
 
 	if err := s.store.Walk(session.Context(), func(info content.Info) error {
-		buffer = append(buffer, infoToGRPC(info))
+		buffer = append(buffer, proxy.InfoToProto(info))
 
 		if len(buffer) >= 100 {
 			if err := sendBlock(buffer); err != nil {
@@ -449,24 +450,4 @@ func (s *service) Abort(ctx context.Context, req *api.AbortRequest) (*ptypes.Emp
 	}
 
 	return empty, nil
-}
-
-func infoToGRPC(info content.Info) *api.Info {
-	return &api.Info{
-		Digest:    info.Digest.String(),
-		Size:      info.Size,
-		CreatedAt: protobuf.ToTimestamp(info.CreatedAt),
-		UpdatedAt: protobuf.ToTimestamp(info.UpdatedAt),
-		Labels:    info.Labels,
-	}
-}
-
-func infoFromGRPC(info *api.Info) content.Info {
-	return content.Info{
-		Digest:    digest.Digest(info.Digest),
-		Size:      info.Size,
-		CreatedAt: protobuf.FromTimestamp(info.CreatedAt),
-		UpdatedAt: protobuf.FromTimestamp(info.UpdatedAt),
-		Labels:    info.Labels,
-	}
 }

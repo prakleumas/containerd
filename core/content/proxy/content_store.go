@@ -74,7 +74,7 @@ func (pcs *proxyContentStore) Info(ctx context.Context, dgst digest.Digest) (con
 		return content.Info{}, errgrpc.ToNative(err)
 	}
 
-	return infoFromGRPC(resp.Info), nil
+	return InfoFromProto(resp.Info), nil
 }
 
 func (pcs *proxyContentStore) Walk(ctx context.Context, fn content.WalkFunc, filters ...string) error {
@@ -96,7 +96,7 @@ func (pcs *proxyContentStore) Walk(ctx context.Context, fn content.WalkFunc, fil
 		}
 
 		for _, info := range msg.Info {
-			if err := fn(infoFromGRPC(info)); err != nil {
+			if err := fn(InfoFromProto(info)); err != nil {
 				return err
 			}
 		}
@@ -151,7 +151,7 @@ func (pcs *proxyContentStore) Status(ctx context.Context, ref string) (content.S
 
 func (pcs *proxyContentStore) Update(ctx context.Context, info content.Info, fieldpaths ...string) (content.Info, error) {
 	resp, err := pcs.client.Update(ctx, &contentapi.UpdateRequest{
-		Info: infoToGRPC(&info),
+		Info: InfoToProto(info),
 		UpdateMask: &protobuftypes.FieldMask{
 			Paths: fieldpaths,
 		},
@@ -159,7 +159,7 @@ func (pcs *proxyContentStore) Update(ctx context.Context, info content.Info, fie
 	if err != nil {
 		return content.Info{}, errgrpc.ToNative(err)
 	}
-	return infoFromGRPC(resp.Info), nil
+	return InfoFromProto(resp.Info), nil
 }
 
 func (pcs *proxyContentStore) ListStatuses(ctx context.Context, filters ...string) ([]content.Status, error) {
@@ -303,7 +303,9 @@ func (c convertClient) Abort(ctx context.Context, req *contentapi.AbortRequest) 
 	return c.ContentClient.Abort(ctx, req)
 }
 
-func infoToGRPC(info *content.Info) *contentapi.Info {
+// InfoToProto converts from [content.Info] to the protobuf definition
+// [contentapi.Info].
+func InfoToProto(info content.Info) *contentapi.Info {
 	return &contentapi.Info{
 		Digest:    info.Digest.String(),
 		Size:      info.Size,
@@ -313,7 +315,9 @@ func infoToGRPC(info *content.Info) *contentapi.Info {
 	}
 }
 
-func infoFromGRPC(info *contentapi.Info) content.Info {
+// InfoFromProto converts from the protobuf definition [contentapi.Info] to
+// [content.Info].
+func InfoFromProto(info *contentapi.Info) content.Info {
 	return content.Info{
 		Digest:    digest.Digest(info.Digest),
 		Size:      info.Size,
