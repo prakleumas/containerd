@@ -19,8 +19,6 @@ package oci
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +32,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/containerd/errdefs"
 	"github.com/containerd/platforms"
@@ -47,6 +44,7 @@ import (
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/internal/fsview"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 )
 
@@ -955,11 +953,7 @@ func withReadonlyFS(ctx context.Context, client Client, mounts []mount.Mount, fn
 	}
 
 	if mm != nil {
-		t := time.Now()
-		var b [3]byte
-		// Ignore read failures, just decreases uniqueness
-		rand.Read(b[:])
-		id := fmt.Sprintf("readonly-fs-%d-%s", t.Nanosecond(), base64.URLEncoding.EncodeToString(b[:]))
+		id := "readonly-fs-" + uniqueid.New()
 
 		// TODO: Use temporary once the read only can be optimized for single bind mounts
 		active, err := mm.Activate(ctx, id, mounts)

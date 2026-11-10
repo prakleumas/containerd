@@ -18,8 +18,6 @@ package apply
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"time"
@@ -27,6 +25,7 @@ import (
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	digest "github.com/opencontainers/go-digest"
@@ -114,10 +113,7 @@ func (s *fsApplier) Apply(ctx context.Context, desc ocispec.Descriptor, mounts [
 	// will be more than 1 in reality; this is needed to work around some
 	// overlayfs/bind shortcuts in core/diff/apply/apply_linux.go
 	if s.mount != nil && len(mounts) > 1 {
-		var b [3]byte
-		// Ignore read failures, just decreases uniqueness
-		rand.Read(b[:])
-		id := fmt.Sprintf("fs-diffapply-%d-%s", t1.Nanosecond(), base64.URLEncoding.EncodeToString(b[:]))
+		id := "fs-diffapply-" + uniqueid.New()
 		info, err := s.mount.Activate(ctx, id, mounts)
 		if err == nil {
 			defer s.mount.Deactivate(ctx, id)

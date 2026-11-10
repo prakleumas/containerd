@@ -18,12 +18,9 @@ package erofs
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"path/filepath"
-	"time"
 
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/errdefs"
@@ -35,6 +32,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/internal/erofsutils"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/epoch"
@@ -91,7 +89,7 @@ func (s erofsDiff) Compare(ctx context.Context, lower, upper []mount.Mount, opts
 	var newReference bool
 	if config.Reference == "" {
 		newReference = true
-		config.Reference = uniqueRef()
+		config.Reference = uniqueid.NewUnixNano()
 	}
 
 	cw, err := s.store.Writer(ctx,
@@ -187,12 +185,4 @@ func (s erofsDiff) Compare(ctx context.Context, lower, upper []mount.Mount, opts
 		Size:      info.Size,
 		Digest:    info.Digest,
 	}, nil
-}
-
-func uniqueRef() string {
-	t := time.Now()
-	var b [3]byte
-	// Ignore read failures, just decreases uniqueness
-	rand.Read(b[:])
-	return fmt.Sprintf("%d-%s", t.UnixNano(), base64.URLEncoding.EncodeToString(b[:]))
 }

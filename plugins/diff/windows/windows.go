@@ -20,8 +20,6 @@ package windows
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"time"
@@ -39,6 +37,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/epoch"
@@ -207,7 +206,7 @@ func (s windowsDiff) Compare(ctx context.Context, lower, upper []mount.Mount, op
 	newReference := false
 	if config.Reference == "" {
 		newReference = true
-		config.Reference = uniqueRef()
+		config.Reference = uniqueid.NewUnixNano()
 	}
 
 	cw, err := s.store.Writer(ctx, content.WithRef(config.Reference), content.WithDescriptor(ocispec.Descriptor{
@@ -397,12 +396,4 @@ func mountPairToLayerStack(lower, upper []mount.Mount) ([]string, error) {
 	}
 
 	return append([]string{upperLayer}, upperParentLayerPaths...), nil
-}
-
-func uniqueRef() string {
-	t := time.Now()
-	var b [3]byte
-	// Ignore read failures, just decreases uniqueness
-	rand.Read(b[:])
-	return fmt.Sprintf("%d-%s", t.UnixNano(), base64.URLEncoding.EncodeToString(b[:]))
 }

@@ -18,8 +18,6 @@ package unpack
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +42,7 @@ import (
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/internal/cleanup"
 	"github.com/containerd/containerd/v2/internal/kmutex"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/containerd/v2/pkg/labels"
 	"github.com/containerd/containerd/v2/pkg/tracing"
 )
@@ -504,7 +503,7 @@ func (u *Unpacker) unpack(
 
 		for try := 1; try <= 3; try++ {
 			// Prepare snapshot with from parent, label as root
-			key = fmt.Sprintf(snapshots.UnpackKeyFormat, uniquePart(), chainID)
+			key = fmt.Sprintf(snapshots.UnpackKeyFormat, uniqueid.New(), chainID)
 			mounts, err = sn.Prepare(ctx, key, parent, opts...)
 			if err != nil {
 				if errdefs.IsAlreadyExists(err) {
@@ -872,14 +871,6 @@ func (u *Unpacker) supportParallel(unpack *Platform) bool {
 		return false
 	}
 	return true
-}
-
-func uniquePart() string {
-	t := time.Now()
-	var b [3]byte
-	// Ignore read failures, just decreases uniqueness
-	rand.Read(b[:])
-	return fmt.Sprintf("%d-%s", t.Nanosecond(), base64.URLEncoding.EncodeToString(b[:]))
 }
 
 // isStaged reports whether a successful Prepare has already staged the

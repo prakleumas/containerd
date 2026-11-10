@@ -18,16 +18,14 @@ package streaming
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	transferapi "github.com/containerd/containerd/api/types/transfer"
 	"github.com/containerd/containerd/v2/core/streaming"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/log"
 	"github.com/containerd/typeurl/v2"
 )
@@ -205,8 +203,5 @@ func ReceiveStream(ctx context.Context, stream streaming.Stream) io.Reader {
 }
 
 func GenerateID(prefix string) string {
-	t := time.Now()
-	var b [3]byte
-	rand.Read(b[:])
-	return fmt.Sprintf("%s-%d-%s", prefix, t.Nanosecond(), base64.URLEncoding.EncodeToString(b[:]))
+	return prefix + "-" + uniqueid.New()
 }

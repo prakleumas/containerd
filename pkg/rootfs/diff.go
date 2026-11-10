@@ -24,6 +24,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/internal/cleanup"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -37,7 +38,7 @@ func CreateDiff(ctx context.Context, snapshotID string, sn snapshots.Snapshotter
 		return ocispec.Descriptor{}, err
 	}
 
-	lowerKey := fmt.Sprintf("%s-parent-view-%s", info.Parent, uniquePart())
+	lowerKey := fmt.Sprintf("%s-parent-view-%s", info.Parent, uniqueid.New())
 	lower, err := sn.View(ctx, lowerKey, info.Parent)
 	if err != nil {
 		return ocispec.Descriptor{}, err
@@ -53,7 +54,7 @@ func CreateDiff(ctx context.Context, snapshotID string, sn snapshots.Snapshotter
 			return ocispec.Descriptor{}, err
 		}
 	} else {
-		upperKey := fmt.Sprintf("%s-view-%s", snapshotID, uniquePart())
+		upperKey := fmt.Sprintf("%s-view-%s", snapshotID, uniqueid.New())
 		upper, err = sn.View(ctx, upperKey, snapshotID)
 		if err != nil {
 			return ocispec.Descriptor{}, err

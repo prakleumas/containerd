@@ -18,8 +18,6 @@ package images
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -35,6 +33,7 @@ import (
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/defaults"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 )
 
 var mountCommand = &cli.Command{
@@ -78,10 +77,7 @@ When you are done, use the unmount command.
 
 		var key string
 		if target == "" {
-			t := time.Now()
-			var b [3]byte
-			rand.Read(b[:])
-			key = fmt.Sprintf("ctr-images-mount-%d-%s", t.Nanosecond(), base64.URLEncoding.EncodeToString(b[:]))
+			key = "ctr-images-mount-" + uniqueid.New()
 		} else {
 			key = target
 		}

@@ -18,12 +18,9 @@ package walking
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
@@ -33,6 +30,7 @@ import (
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/epoch"
@@ -103,7 +101,7 @@ func (s *walkingDiff) Compare(ctx context.Context, lower, upper []mount.Mount, o
 			var newReference bool
 			if config.Reference == "" {
 				newReference = true
-				config.Reference = uniqueRef()
+				config.Reference = uniqueid.NewUnixNano()
 			}
 
 			cw, err := s.store.Writer(ctx,
@@ -204,12 +202,4 @@ func (s *walkingDiff) Compare(ctx context.Context, lower, upper []mount.Mount, o
 	}
 
 	return ocidesc, nil
-}
-
-func uniqueRef() string {
-	t := time.Now()
-	var b [3]byte
-	// Ignore read failures, just decreases uniqueness
-	rand.Read(b[:])
-	return fmt.Sprintf("%d-%s", t.UnixNano(), base64.URLEncoding.EncodeToString(b[:]))
 }

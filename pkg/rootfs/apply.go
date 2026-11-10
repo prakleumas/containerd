@@ -18,14 +18,12 @@ package rootfs
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
-	"time"
 
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
+	"github.com/containerd/containerd/v2/internal/uniqueid"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/opencontainers/go-digest"
@@ -122,7 +120,7 @@ func applyLayers(ctx context.Context, layers []Layer, chain []digest.Digest, sn 
 	)
 
 	for {
-		key = fmt.Sprintf(snapshots.UnpackKeyFormat, uniquePart(), chainID)
+		key = fmt.Sprintf(snapshots.UnpackKeyFormat, uniqueid.New(), chainID)
 
 		// Prepare snapshot with from parent, label as root
 		mounts, err = sn.Prepare(ctx, key, parent.String(), opts...)
@@ -175,12 +173,4 @@ func applyLayers(ctx context.Context, layers []Layer, chain []digest.Digest, sn 
 	}
 
 	return nil
-}
-
-func uniquePart() string {
-	t := time.Now()
-	var b [3]byte
-	// Ignore read failures, just decreases uniqueness
-	rand.Read(b[:])
-	return fmt.Sprintf("%d-%s", t.Nanosecond(), base64.URLEncoding.EncodeToString(b[:]))
 }
