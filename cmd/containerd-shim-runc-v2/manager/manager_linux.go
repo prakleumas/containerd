@@ -83,7 +83,7 @@ type manager struct {
 	name string
 }
 
-func newCommand(ctx context.Context, id, containerdAddress, containerdTTRPCAddress string, debug bool) (*exec.Cmd, error) {
+func newCommand(ctx context.Context, id, containerdAddress, containerdTTRPCAddress string, debug bool, env []string) (*exec.Cmd, error) {
 	ns, err := namespaces.NamespaceRequired(ctx)
 	if err != nil {
 		return nil, err
@@ -107,6 +107,17 @@ func newCommand(ctx context.Context, id, containerdAddress, containerdTTRPCAddre
 	cmd := exec.Command(self, args...)
 	cmd.Dir = cwd
 	cmd.Env = append(os.Environ(), "GOMAXPROCS=4")
+	cmd.Env = append(cmd.Env, env...)
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+	return cmd, nil
+}
+
+// otelEnv returns the OpenTelemetry environment of a containerd-shim-runc-v2
+// process.
+func otelEnv(id string) []string {
 	// Preserve inherited resource attributes, but override the daemon's identity.
 	// The OpenTelemetry SDK uses the last value for duplicate resource keys.
 	var attrs []string
@@ -117,15 +128,10 @@ func newCommand(ctx context.Context, id, containerdAddress, containerdTTRPCAddre
 		"service.instance.id="+url.PathEscape(id),
 		"service.version="+url.PathEscape(version.Version),
 	)
-	cmd.Env = append(cmd.Env,
+	return []string{
 		"OTEL_SERVICE_NAME=containerd-shim-runc-v2",
-		"OTEL_RESOURCE_ATTRIBUTES="+strings.Join(attrs, ","),
-	)
-
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
+		"OTEL_RESOURCE_ATTRIBUTES=" + strings.Join(attrs, ","),
 	}
-	return cmd, nil
 }
 
 func readSpec() (*spec, error) {
@@ -199,19 +205,8 @@ func newShimSocket(ctx context.Context, root, path, id string, debug bool) (*shi
 	return s, nil
 }
 
-func (manager) Start(ctx context.Context, opts *bootapi.BootstrapParams) (_ *bootapi.BootstrapResult, retErr error) {
-	var params bootapi.BootstrapResult
-	params.Version = 3
-	params.Protocol = "ttrpc"
-
+func (manager) Start(ctx context.Context, opts *bootapi.BootstrapParams) (*bootapi.BootstrapResult, error) {
 	id := opts.GetInstanceID()
-
-	debugLog := opts.GetLogLevel() <= bootapi.LogLevel_LOG_LEVEL_DEBUG
-
-	cmd, err := newCommand(ctx, id, opts.GetContainerdGrpcAddress(), opts.GetContainerdTtrpcAddress(), debugLog)
-	if err != nil {
-		return nil, err
-	}
 	grouping := id
 	spec, err := readSpec()
 	if err != nil {
@@ -223,6 +218,45 @@ func (manager) Start(ctx context.Context, opts *bootapi.BootstrapParams) (_ *boo
 			grouping = groupID
 			break
 		}
+	}
+
+	return Start(ctx, opts, startConfig(id, grouping))
+}
+
+// startConfig returns the StartConfig of a containerd-shim-runc-v2 shim.
+func startConfig(id, grouping string) StartConfig {
+	return StartConfig{
+		Grouping: grouping,
+		Env:      otelEnv(id),
+	}
+}
+
+// StartConfig holds what differs between the shims that start through Start.
+type StartConfig struct {
+	// Grouping is the key of the shim socket address. Start requests with
+	// the same key are served by one shim process.
+	Grouping string
+	// Env is appended to the environment of the shim process.
+	Env []string
+	// OnRuncOptions, when set, is called with the runc options of the start
+	// request after the shim process starts and before it joins the shim
+	// cgroup. An error from it fails the start.
+	OnRuncOptions func(*options.Options) error
+}
+
+// Start starts a shim process running this executable and returns its
+// bootstrap result. If a shim already serves cfg.Grouping, Start returns the
+// address of that shim.
+func Start(ctx context.Context, opts *bootapi.BootstrapParams, cfg StartConfig) (_ *bootapi.BootstrapResult, retErr error) {
+	var params bootapi.BootstrapResult
+	params.Version = 3
+	params.Protocol = "ttrpc"
+
+	debugLog := opts.GetLogLevel() <= bootapi.LogLevel_LOG_LEVEL_DEBUG
+
+	cmd, err := newCommand(ctx, opts.GetInstanceID(), opts.GetContainerdGrpcAddress(), opts.GetContainerdTtrpcAddress(), debugLog, cfg.Env)
+	if err != nil {
+		return nil, err
 	}
 
 	var sockets []*shimSocket
@@ -238,7 +272,7 @@ func (manager) Start(ctx context.Context, opts *bootapi.BootstrapParams) (_ *boo
 	if socketDir == "" {
 		socketDir = filepath.Join(defaults.DefaultStateDir, "s")
 	}
-	s, err := newShimSocket(ctx, socketDir, opts.GetContainerdGrpcAddress(), grouping, false)
+	s, err := newShimSocket(ctx, socketDir, opts.GetContainerdGrpcAddress(), cfg.Grouping, false)
 	if err != nil {
 		if errdefs.IsAlreadyExists(err) {
 			params.Address = s.addr
@@ -250,7 +284,7 @@ func (manager) Start(ctx context.Context, opts *bootapi.BootstrapParams) (_ *boo
 	cmd.ExtraFiles = append(cmd.ExtraFiles, s.f)
 
 	if debugLog {
-		s, err = newShimSocket(ctx, socketDir, opts.GetContainerdGrpcAddress(), grouping, true)
+		s, err = newShimSocket(ctx, socketDir, opts.GetContainerdGrpcAddress(), cfg.Grouping, true)
 		if err != nil {
 			return nil, err
 		}
@@ -258,18 +292,21 @@ func (manager) Start(ctx context.Context, opts *bootapi.BootstrapParams) (_ *boo
 		cmd.ExtraFiles = append(cmd.ExtraFiles, s.f)
 	}
 
-	goruntime.LockOSThread()
-	if os.Getenv("SCHED_CORE") != "" {
-		if err := schedcore.Create(schedcore.ProcessGroup); err != nil {
-			return nil, fmt.Errorf("enable sched core support: %w", err)
+	// The shim is spawned from a locked thread so that a core scheduling
+	// cookie created here is inherited by it.
+	err = func() error {
+		goruntime.LockOSThread()
+		defer goruntime.UnlockOSThread()
+		if os.Getenv("SCHED_CORE") != "" {
+			if err := schedcore.Create(schedcore.ProcessGroup); err != nil {
+				return fmt.Errorf("enable sched core support: %w", err)
+			}
 		}
-	}
-
-	if err := cmd.Start(); err != nil {
+		return cmd.Start()
+	}()
+	if err != nil {
 		return nil, err
 	}
-
-	goruntime.UnlockOSThread()
 
 	defer func() {
 		if retErr != nil {
@@ -283,6 +320,11 @@ func (manager) Start(ctx context.Context, opts *bootapi.BootstrapParams) (_ *boo
 	if found, err := opts.FindExtension(&runcOpts); err != nil {
 		return nil, fmt.Errorf("failed to fetch runc options: %w", err)
 	} else if found {
+		if cfg.OnRuncOptions != nil {
+			if err := cfg.OnRuncOptions(&runcOpts); err != nil {
+				return nil, err
+			}
+		}
 		if shimCgroup := runcOpts.GetShimCgroup(); shimCgroup != "" {
 			if cgroups.Mode() == cgroups.Unified {
 				cg, err := cgroupsv2.Load(shimCgroup)

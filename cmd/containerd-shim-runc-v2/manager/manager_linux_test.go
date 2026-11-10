@@ -51,7 +51,7 @@ func TestNewCommandTracingResource(t *testing.T) {
 			t.Setenv("OTEL_RESOURCE_ATTRIBUTES", tc.inherited)
 			ctx := namespaces.WithNamespace(context.Background(), "test-ns")
 			for _, id := range []string{"test-shim", "another-shim"} {
-				cmd, err := newCommand(ctx, id, "/containerd.sock", "/containerd.sock.ttrpc", false)
+				cmd, err := newCommand(ctx, id, "/containerd.sock", "/containerd.sock.ttrpc", false, startConfig(id, id).Env)
 				require.NoError(t, err)
 				// Environ applies exec.Cmd's duplicate-variable handling. Read the
 				// resulting resource with the SDK without using its cached default.
