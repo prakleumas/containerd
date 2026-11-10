@@ -66,533 +66,346 @@ func (in *instrumentedService) checkInitialized() error {
 	return errgrpc.ToGRPCf(errdefs.ErrUnavailable, "server is not initialized yet")
 }
 
-func (in *instrumentedService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandboxRequest) (res *runtime.RunPodSandboxResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
+// logLine is a log message and the level to write it at.
+type logLine struct {
+	level  log.Level
+	format string
+	args   []any
+}
+
+func infof(format string, args ...any) logLine  { return logLine{log.InfoLevel, format, args} }
+func debugf(format string, args ...any) logLine { return logLine{log.DebugLevel, format, args} }
+func tracef(format string, args ...any) logLine { return logLine{log.TraceLevel, format, args} }
+func errorf(format string, args ...any) logLine { return logLine{log.ErrorLevel, format, args} }
+
+// write logs l to e. A zero logLine writes nothing.
+func (l logLine) write(e *log.Entry) {
+	if l.format != "" {
+		e.Logf(l.level, l.format, l.args...)
 	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("RunPodSandbox for %+v", r.GetConfig().GetMetadata())
+}
+
+// spanMode selects whether call records the RPC error on the request span.
+type spanMode bool
+
+const (
+	untraced spanMode = false
+	traced   spanMode = true
+)
+
+// call serves one unary RPC with fn. It fails if the service is not
+// initialized, logs start, calls fn with the containerd namespace in the
+// context, and converts the returned error to a gRPC error. It then logs
+// failed with that error, or done with the response, and records the error
+// on the span when mode is traced.
+func call[Req, Res any](ctx context.Context, in *instrumentedService, r Req, fn func(context.Context, Req) (Res, error),
+	mode spanMode, start, failed logLine, done func(Res) logLine) (res Res, err error) {
+	if err := in.checkInitialized(); err != nil {
+		return res, err
+	}
+	start.write(log.G(ctx))
 	defer func() {
 		if err != nil {
-			log.G(ctx).WithError(err).Errorf("RunPodSandbox for %+v failed, error", r.GetConfig().GetMetadata())
+			failed.write(log.G(ctx).WithError(err))
 		} else {
-			log.G(ctx).Infof("RunPodSandbox for %+v returns sandbox id %q", r.GetConfig().GetMetadata(), res.GetPodSandboxId())
+			done(res).write(log.G(ctx))
 		}
-		span.RecordError(err)
+		if mode == traced {
+			tracing.SpanFromContext(ctx).RecordError(err)
+		}
 	}()
-	res, err = in.c.RunPodSandbox(ctrdutil.WithNamespace(ctx), r)
+	res, err = fn(ctrdutil.WithNamespace(ctx), r)
 	return res, errgrpc.ToGRPC(err)
 }
 
-func (in *instrumentedService) ListPodSandbox(ctx context.Context, r *runtime.ListPodSandboxRequest) (res *runtime.ListPodSandboxResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ListPodSandbox with filter %+v", r.GetFilter())
-	defer func() {
+// sanitized wraps fn to remove sensitive information from its error, which
+// call then logs and returns.
+func sanitized[Req, Res any](fn func(context.Context, Req) (Res, error)) func(context.Context, Req) (Res, error) {
+	return func(ctx context.Context, r Req) (Res, error) {
+		res, err := fn(ctx, r)
 		if err != nil {
-			log.G(ctx).WithError(err).Error("ListPodSandbox failed")
-		} else {
-			log.G(ctx).Tracef("ListPodSandbox returns pod sandboxes %+v", res.GetItems())
+			err = ctrdutil.SanitizeError(err)
 		}
-	}()
-	res, err = in.c.ListPodSandbox(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+		return res, err
+	}
 }
 
-func (in *instrumentedService) PodSandboxStatus(ctx context.Context, r *runtime.PodSandboxStatusRequest) (res *runtime.PodSandboxStatusResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("PodSandboxStatus for %q", r.GetPodSandboxId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("PodSandboxStatus for %q failed", r.GetPodSandboxId())
-		} else {
-			log.G(ctx).Tracef("PodSandboxStatus for %q returns status %+v", r.GetPodSandboxId(), res.GetStatus())
-		}
-	}()
-	res, err = in.c.PodSandboxStatus(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandboxRequest) (*runtime.RunPodSandboxResponse, error) {
+	return call(ctx, in, r, in.c.RunPodSandbox, traced,
+		infof("RunPodSandbox for %+v", r.GetConfig().GetMetadata()),
+		errorf("RunPodSandbox for %+v failed, error", r.GetConfig().GetMetadata()),
+		func(res *runtime.RunPodSandboxResponse) logLine {
+			return infof("RunPodSandbox for %+v returns sandbox id %q", r.GetConfig().GetMetadata(), res.GetPodSandboxId())
+		})
 }
 
-func (in *instrumentedService) StopPodSandbox(ctx context.Context, r *runtime.StopPodSandboxRequest) (_ *runtime.StopPodSandboxResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("StopPodSandbox for %q", r.GetPodSandboxId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("StopPodSandbox for %q failed", r.GetPodSandboxId())
-		} else {
-			log.G(ctx).Infof("StopPodSandbox for %q returns successfully", r.GetPodSandboxId())
-		}
-		span.RecordError(err)
-	}()
-	res, err := in.c.StopPodSandbox(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ListPodSandbox(ctx context.Context, r *runtime.ListPodSandboxRequest) (*runtime.ListPodSandboxResponse, error) {
+	return call(ctx, in, r, in.c.ListPodSandbox, untraced,
+		tracef("ListPodSandbox with filter %+v", r.GetFilter()),
+		errorf("ListPodSandbox failed"),
+		func(res *runtime.ListPodSandboxResponse) logLine {
+			return tracef("ListPodSandbox returns pod sandboxes %+v", res.GetItems())
+		})
 }
 
-func (in *instrumentedService) RemovePodSandbox(ctx context.Context, r *runtime.RemovePodSandboxRequest) (_ *runtime.RemovePodSandboxResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("RemovePodSandbox for %q", r.GetPodSandboxId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("RemovePodSandbox for %q failed", r.GetPodSandboxId())
-		} else {
-			log.G(ctx).Infof("RemovePodSandbox %q returns successfully", r.GetPodSandboxId())
-		}
-		span.RecordError(err)
-	}()
-	res, err := in.c.RemovePodSandbox(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) PodSandboxStatus(ctx context.Context, r *runtime.PodSandboxStatusRequest) (*runtime.PodSandboxStatusResponse, error) {
+	return call(ctx, in, r, in.c.PodSandboxStatus, untraced,
+		tracef("PodSandboxStatus for %q", r.GetPodSandboxId()),
+		errorf("PodSandboxStatus for %q failed", r.GetPodSandboxId()),
+		func(res *runtime.PodSandboxStatusResponse) logLine {
+			return tracef("PodSandboxStatus for %q returns status %+v", r.GetPodSandboxId(), res.GetStatus())
+		})
 }
 
-func (in *instrumentedService) PortForward(ctx context.Context, r *runtime.PortForwardRequest) (res *runtime.PortForwardResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Infof("Portforward for %q port %v", r.GetPodSandboxId(), r.GetPort())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("Portforward for %q failed", r.GetPodSandboxId())
-		} else {
-			log.G(ctx).Infof("Portforward for %q returns URL %q", r.GetPodSandboxId(), res.GetUrl())
-		}
-	}()
-	res, err = in.c.PortForward(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) StopPodSandbox(ctx context.Context, r *runtime.StopPodSandboxRequest) (*runtime.StopPodSandboxResponse, error) {
+	return call(ctx, in, r, in.c.StopPodSandbox, traced,
+		infof("StopPodSandbox for %q", r.GetPodSandboxId()),
+		errorf("StopPodSandbox for %q failed", r.GetPodSandboxId()),
+		func(*runtime.StopPodSandboxResponse) logLine {
+			return infof("StopPodSandbox for %q returns successfully", r.GetPodSandboxId())
+		})
 }
 
-func (in *instrumentedService) CreateContainer(ctx context.Context, r *runtime.CreateContainerRequest) (res *runtime.CreateContainerResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("CreateContainer within sandbox %q for container %+v",
-		r.GetPodSandboxId(), r.GetConfig().GetMetadata())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("CreateContainer within sandbox %q for %+v failed",
-				r.GetPodSandboxId(), r.GetConfig().GetMetadata())
-		} else {
-			log.G(ctx).Infof("CreateContainer within sandbox %q for %+v returns container id %q",
+func (in *instrumentedService) RemovePodSandbox(ctx context.Context, r *runtime.RemovePodSandboxRequest) (*runtime.RemovePodSandboxResponse, error) {
+	return call(ctx, in, r, in.c.RemovePodSandbox, traced,
+		infof("RemovePodSandbox for %q", r.GetPodSandboxId()),
+		errorf("RemovePodSandbox for %q failed", r.GetPodSandboxId()),
+		func(*runtime.RemovePodSandboxResponse) logLine {
+			return infof("RemovePodSandbox %q returns successfully", r.GetPodSandboxId())
+		})
+}
+
+func (in *instrumentedService) PortForward(ctx context.Context, r *runtime.PortForwardRequest) (*runtime.PortForwardResponse, error) {
+	return call(ctx, in, r, in.c.PortForward, untraced,
+		infof("Portforward for %q port %v", r.GetPodSandboxId(), r.GetPort()),
+		errorf("Portforward for %q failed", r.GetPodSandboxId()),
+		func(res *runtime.PortForwardResponse) logLine {
+			return infof("Portforward for %q returns URL %q", r.GetPodSandboxId(), res.GetUrl())
+		})
+}
+
+func (in *instrumentedService) CreateContainer(ctx context.Context, r *runtime.CreateContainerRequest) (*runtime.CreateContainerResponse, error) {
+	return call(ctx, in, r, in.c.CreateContainer, traced,
+		infof("CreateContainer within sandbox %q for container %+v",
+			r.GetPodSandboxId(), r.GetConfig().GetMetadata()),
+		errorf("CreateContainer within sandbox %q for %+v failed",
+			r.GetPodSandboxId(), r.GetConfig().GetMetadata()),
+		func(res *runtime.CreateContainerResponse) logLine {
+			return infof("CreateContainer within sandbox %q for %+v returns container id %q",
 				r.GetPodSandboxId(), r.GetConfig().GetMetadata(), res.GetContainerId())
-		}
-		span.RecordError(err)
-	}()
-	res, err = in.c.CreateContainer(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+		})
 }
 
-func (in *instrumentedService) StartContainer(ctx context.Context, r *runtime.StartContainerRequest) (_ *runtime.StartContainerResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("StartContainer for %q", r.GetContainerId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("StartContainer for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Infof("StartContainer for %q returns successfully", r.GetContainerId())
-		}
-		span.RecordError(err)
-	}()
-	res, err := in.c.StartContainer(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) StartContainer(ctx context.Context, r *runtime.StartContainerRequest) (*runtime.StartContainerResponse, error) {
+	return call(ctx, in, r, in.c.StartContainer, traced,
+		infof("StartContainer for %q", r.GetContainerId()),
+		errorf("StartContainer for %q failed", r.GetContainerId()),
+		func(*runtime.StartContainerResponse) logLine {
+			return infof("StartContainer for %q returns successfully", r.GetContainerId())
+		})
 }
 
-func (in *instrumentedService) ListContainers(ctx context.Context, r *runtime.ListContainersRequest) (res *runtime.ListContainersResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ListContainers with filter %+v", r.GetFilter())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("ListContainers with filter %+v failed", r.GetFilter())
-		} else {
-			log.G(ctx).Tracef("ListContainers with filter %+v returns containers %+v",
+func (in *instrumentedService) ListContainers(ctx context.Context, r *runtime.ListContainersRequest) (*runtime.ListContainersResponse, error) {
+	return call(ctx, in, r, in.c.ListContainers, untraced,
+		tracef("ListContainers with filter %+v", r.GetFilter()),
+		errorf("ListContainers with filter %+v failed", r.GetFilter()),
+		func(res *runtime.ListContainersResponse) logLine {
+			return tracef("ListContainers with filter %+v returns containers %+v",
 				r.GetFilter(), res.GetContainers())
-		}
-	}()
-	res, err = in.c.ListContainers(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+		})
 }
 
-func (in *instrumentedService) ContainerStatus(ctx context.Context, r *runtime.ContainerStatusRequest) (res *runtime.ContainerStatusResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ContainerStatus for %q", r.GetContainerId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("ContainerStatus for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Tracef("ContainerStatus for %q returns status %+v", r.GetContainerId(), res.GetStatus())
-		}
-	}()
-	res, err = in.c.ContainerStatus(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ContainerStatus(ctx context.Context, r *runtime.ContainerStatusRequest) (*runtime.ContainerStatusResponse, error) {
+	return call(ctx, in, r, in.c.ContainerStatus, untraced,
+		tracef("ContainerStatus for %q", r.GetContainerId()),
+		errorf("ContainerStatus for %q failed", r.GetContainerId()),
+		func(res *runtime.ContainerStatusResponse) logLine {
+			return tracef("ContainerStatus for %q returns status %+v", r.GetContainerId(), res.GetStatus())
+		})
 }
 
-func (in *instrumentedService) StopContainer(ctx context.Context, r *runtime.StopContainerRequest) (res *runtime.StopContainerResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("StopContainer for %q with timeout %d (s)", r.GetContainerId(), r.GetTimeout())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("StopContainer for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Infof("StopContainer for %q returns successfully", r.GetContainerId())
-		}
-		span.RecordError(err)
-	}()
-	res, err = in.c.StopContainer(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) StopContainer(ctx context.Context, r *runtime.StopContainerRequest) (*runtime.StopContainerResponse, error) {
+	return call(ctx, in, r, in.c.StopContainer, traced,
+		infof("StopContainer for %q with timeout %d (s)", r.GetContainerId(), r.GetTimeout()),
+		errorf("StopContainer for %q failed", r.GetContainerId()),
+		func(*runtime.StopContainerResponse) logLine {
+			return infof("StopContainer for %q returns successfully", r.GetContainerId())
+		})
 }
 
-func (in *instrumentedService) RemoveContainer(ctx context.Context, r *runtime.RemoveContainerRequest) (res *runtime.RemoveContainerResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("RemoveContainer for %q", r.GetContainerId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("RemoveContainer for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Infof("RemoveContainer for %q returns successfully", r.GetContainerId())
-		}
-		span.RecordError(err)
-	}()
-	res, err = in.c.RemoveContainer(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) RemoveContainer(ctx context.Context, r *runtime.RemoveContainerRequest) (*runtime.RemoveContainerResponse, error) {
+	return call(ctx, in, r, in.c.RemoveContainer, traced,
+		infof("RemoveContainer for %q", r.GetContainerId()),
+		errorf("RemoveContainer for %q failed", r.GetContainerId()),
+		func(*runtime.RemoveContainerResponse) logLine {
+			return infof("RemoveContainer for %q returns successfully", r.GetContainerId())
+		})
 }
 
-func (in *instrumentedService) ExecSync(ctx context.Context, r *runtime.ExecSyncRequest) (res *runtime.ExecSyncResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Debugf("ExecSync for %q with command %+v and timeout %d (s)", r.GetContainerId(), r.GetCmd(), r.GetTimeout())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("ExecSync for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Tracef("ExecSync for %q returns with exit code %d", r.GetContainerId(), res.GetExitCode())
-		}
-		span.RecordError(err)
-	}()
-	res, err = in.c.ExecSync(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ExecSync(ctx context.Context, r *runtime.ExecSyncRequest) (*runtime.ExecSyncResponse, error) {
+	return call(ctx, in, r, in.c.ExecSync, traced,
+		debugf("ExecSync for %q with command %+v and timeout %d (s)", r.GetContainerId(), r.GetCmd(), r.GetTimeout()),
+		errorf("ExecSync for %q failed", r.GetContainerId()),
+		func(res *runtime.ExecSyncResponse) logLine {
+			return tracef("ExecSync for %q returns with exit code %d", r.GetContainerId(), res.GetExitCode())
+		})
 }
 
-func (in *instrumentedService) Exec(ctx context.Context, r *runtime.ExecRequest) (res *runtime.ExecResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Debugf("Exec for %q with command %+v, tty %v and stdin %v",
-		r.GetContainerId(), r.GetCmd(), r.GetTty(), r.GetStdin())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("Exec for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Debugf("Exec for %q returns URL %q", r.GetContainerId(), res.GetUrl())
-		}
-		span.RecordError(err)
-	}()
-	res, err = in.c.Exec(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) Exec(ctx context.Context, r *runtime.ExecRequest) (*runtime.ExecResponse, error) {
+	return call(ctx, in, r, in.c.Exec, traced,
+		debugf("Exec for %q with command %+v, tty %v and stdin %v",
+			r.GetContainerId(), r.GetCmd(), r.GetTty(), r.GetStdin()),
+		errorf("Exec for %q failed", r.GetContainerId()),
+		func(res *runtime.ExecResponse) logLine {
+			return debugf("Exec for %q returns URL %q", r.GetContainerId(), res.GetUrl())
+		})
 }
 
-func (in *instrumentedService) Attach(ctx context.Context, r *runtime.AttachRequest) (res *runtime.AttachResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Debugf("Attach for %q with tty %v and stdin %v", r.GetContainerId(), r.GetTty(), r.GetStdin())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("Attach for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Debugf("Attach for %q returns URL %q", r.GetContainerId(), res.Url)
-		}
-		span.RecordError(err)
-	}()
-	res, err = in.c.Attach(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) Attach(ctx context.Context, r *runtime.AttachRequest) (*runtime.AttachResponse, error) {
+	return call(ctx, in, r, in.c.Attach, traced,
+		debugf("Attach for %q with tty %v and stdin %v", r.GetContainerId(), r.GetTty(), r.GetStdin()),
+		errorf("Attach for %q failed", r.GetContainerId()),
+		func(res *runtime.AttachResponse) logLine {
+			return debugf("Attach for %q returns URL %q", r.GetContainerId(), res.Url)
+		})
 }
 
-func (in *instrumentedService) UpdateContainerResources(ctx context.Context, r *runtime.UpdateContainerResourcesRequest) (res *runtime.UpdateContainerResourcesResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Infof("UpdateContainerResources for %q with Linux: %+v / Windows: %+v", r.GetContainerId(), r.GetLinux(), r.GetWindows())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("UpdateContainerResources for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Infof("UpdateContainerResources for %q returns successfully", r.GetContainerId())
-		}
-	}()
-	res, err = in.c.UpdateContainerResources(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) UpdateContainerResources(ctx context.Context, r *runtime.UpdateContainerResourcesRequest) (*runtime.UpdateContainerResourcesResponse, error) {
+	return call(ctx, in, r, in.c.UpdateContainerResources, untraced,
+		infof("UpdateContainerResources for %q with Linux: %+v / Windows: %+v", r.GetContainerId(), r.GetLinux(), r.GetWindows()),
+		errorf("UpdateContainerResources for %q failed", r.GetContainerId()),
+		func(*runtime.UpdateContainerResourcesResponse) logLine {
+			return infof("UpdateContainerResources for %q returns successfully", r.GetContainerId())
+		})
 }
 
-func (in *instrumentedService) PullImage(ctx context.Context, r *runtime.PullImageRequest) (res *runtime.PullImageResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("PullImage %q", r.GetImage().GetImage())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("PullImage %q failed", r.GetImage().GetImage())
-		} else {
-			log.G(ctx).Infof("PullImage %q returns image reference %q",
+func (in *instrumentedService) PullImage(ctx context.Context, r *runtime.PullImageRequest) (*runtime.PullImageResponse, error) {
+	return call(ctx, in, r, sanitized(in.c.PullImage), traced,
+		infof("PullImage %q", r.GetImage().GetImage()),
+		errorf("PullImage %q failed", r.GetImage().GetImage()),
+		func(res *runtime.PullImageResponse) logLine {
+			return infof("PullImage %q returns image reference %q",
 				r.GetImage().GetImage(), res.GetImageRef())
-		}
-		span.RecordError(err)
-	}()
-	res, err = in.c.PullImage(ctrdutil.WithNamespace(ctx), r)
-	// Sanitize error to remove sensitive information from both logs and returned gRPC error
-	if err != nil {
-		err = ctrdutil.SanitizeError(err)
-	}
-	return res, errgrpc.ToGRPC(err)
+		})
 }
 
-func (in *instrumentedService) ListImages(ctx context.Context, r *runtime.ListImagesRequest) (res *runtime.ListImagesResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ListImages with filter %+v", r.GetFilter())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("ListImages with filter %+v failed", r.GetFilter())
-		} else {
-			log.G(ctx).Tracef("ListImages with filter %+v returns image list %+v",
+func (in *instrumentedService) ListImages(ctx context.Context, r *runtime.ListImagesRequest) (*runtime.ListImagesResponse, error) {
+	return call(ctx, in, r, sanitized(in.c.ListImages), untraced,
+		tracef("ListImages with filter %+v", r.GetFilter()),
+		errorf("ListImages with filter %+v failed", r.GetFilter()),
+		func(res *runtime.ListImagesResponse) logLine {
+			return tracef("ListImages with filter %+v returns image list %+v",
 				r.GetFilter(), res.GetImages())
-		}
-	}()
-	res, err = in.c.ListImages(ctrdutil.WithNamespace(ctx), r)
-	// Sanitize error to remove sensitive information from both logs and returned gRPC error
-	if err != nil {
-		err = ctrdutil.SanitizeError(err)
-	}
-	return res, errgrpc.ToGRPC(err)
+		})
 }
 
-func (in *instrumentedService) ImageStatus(ctx context.Context, r *runtime.ImageStatusRequest) (res *runtime.ImageStatusResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ImageStatus for %q", r.GetImage().GetImage())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("ImageStatus for %q failed", r.GetImage().GetImage())
-		} else {
-			log.G(ctx).Tracef("ImageStatus for %q returns image status %+v",
+func (in *instrumentedService) ImageStatus(ctx context.Context, r *runtime.ImageStatusRequest) (*runtime.ImageStatusResponse, error) {
+	return call(ctx, in, r, sanitized(in.c.ImageStatus), untraced,
+		tracef("ImageStatus for %q", r.GetImage().GetImage()),
+		errorf("ImageStatus for %q failed", r.GetImage().GetImage()),
+		func(res *runtime.ImageStatusResponse) logLine {
+			return tracef("ImageStatus for %q returns image status %+v",
 				r.GetImage().GetImage(), res.GetImage())
-		}
-	}()
-	res, err = in.c.ImageStatus(ctrdutil.WithNamespace(ctx), r)
-	// Sanitize error to remove sensitive information from both logs and returned gRPC error
-	if err != nil {
-		err = ctrdutil.SanitizeError(err)
-	}
-	return res, errgrpc.ToGRPC(err)
+		})
 }
 
-func (in *instrumentedService) RemoveImage(ctx context.Context, r *runtime.RemoveImageRequest) (_ *runtime.RemoveImageResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	span := tracing.SpanFromContext(ctx)
-	log.G(ctx).Infof("RemoveImage %q", r.GetImage().GetImage())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("RemoveImage %q failed", r.GetImage().GetImage())
-		} else {
-			log.G(ctx).Infof("RemoveImage %q returns successfully", r.GetImage().GetImage())
-		}
-		span.RecordError(err)
-	}()
-	res, err := in.c.RemoveImage(ctrdutil.WithNamespace(ctx), r)
-	// Sanitize error to remove sensitive information from both logs and returned gRPC error
-	if err != nil {
-		err = ctrdutil.SanitizeError(err)
-	}
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) RemoveImage(ctx context.Context, r *runtime.RemoveImageRequest) (*runtime.RemoveImageResponse, error) {
+	return call(ctx, in, r, sanitized(in.c.RemoveImage), traced,
+		infof("RemoveImage %q", r.GetImage().GetImage()),
+		errorf("RemoveImage %q failed", r.GetImage().GetImage()),
+		func(*runtime.RemoveImageResponse) logLine {
+			return infof("RemoveImage %q returns successfully", r.GetImage().GetImage())
+		})
 }
 
-func (in *instrumentedService) ImageFsInfo(ctx context.Context, r *runtime.ImageFsInfoRequest) (res *runtime.ImageFsInfoResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ImageFsInfo")
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Error("ImageFsInfo failed")
-		} else {
-			log.G(ctx).Tracef("ImageFsInfo returns filesystem info %+v", res.ImageFilesystems)
-		}
-	}()
-	res, err = in.c.ImageFsInfo(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ImageFsInfo(ctx context.Context, r *runtime.ImageFsInfoRequest) (*runtime.ImageFsInfoResponse, error) {
+	return call(ctx, in, r, in.c.ImageFsInfo, untraced,
+		tracef("ImageFsInfo"),
+		errorf("ImageFsInfo failed"),
+		func(res *runtime.ImageFsInfoResponse) logLine {
+			return tracef("ImageFsInfo returns filesystem info %+v", res.ImageFilesystems)
+		})
 }
 
-func (in *instrumentedService) PodSandboxStats(ctx context.Context, r *runtime.PodSandboxStatsRequest) (res *runtime.PodSandboxStatsResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("PodSandboxStats for %q", r.GetPodSandboxId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("PodSandboxStats for %q failed", r.GetPodSandboxId())
-		} else {
-			log.G(ctx).Tracef("PodSandboxStats for %q returns stats %+v", r.GetPodSandboxId(), res.GetStats())
-		}
-	}()
-	res, err = in.c.PodSandboxStats(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) PodSandboxStats(ctx context.Context, r *runtime.PodSandboxStatsRequest) (*runtime.PodSandboxStatsResponse, error) {
+	return call(ctx, in, r, in.c.PodSandboxStats, untraced,
+		tracef("PodSandboxStats for %q", r.GetPodSandboxId()),
+		errorf("PodSandboxStats for %q failed", r.GetPodSandboxId()),
+		func(res *runtime.PodSandboxStatsResponse) logLine {
+			return tracef("PodSandboxStats for %q returns stats %+v", r.GetPodSandboxId(), res.GetStats())
+		})
 }
 
-func (in *instrumentedService) ContainerStats(ctx context.Context, r *runtime.ContainerStatsRequest) (res *runtime.ContainerStatsResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ContainerStats for %q", r.GetContainerId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("ContainerStats for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Tracef("ContainerStats for %q returns stats %+v", r.GetContainerId(), res.GetStats())
-		}
-	}()
-	res, err = in.c.ContainerStats(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ContainerStats(ctx context.Context, r *runtime.ContainerStatsRequest) (*runtime.ContainerStatsResponse, error) {
+	return call(ctx, in, r, in.c.ContainerStats, untraced,
+		tracef("ContainerStats for %q", r.GetContainerId()),
+		errorf("ContainerStats for %q failed", r.GetContainerId()),
+		func(res *runtime.ContainerStatsResponse) logLine {
+			return tracef("ContainerStats for %q returns stats %+v", r.GetContainerId(), res.GetStats())
+		})
 }
 
-func (in *instrumentedService) ListPodSandboxStats(ctx context.Context, r *runtime.ListPodSandboxStatsRequest) (res *runtime.ListPodSandboxStatsResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ListPodSandboxStats with filter %+v", r.GetFilter())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Error("ListPodSandboxStats failed")
-		} else {
-			log.G(ctx).Tracef("ListPodSandboxStats returns stats %+v", res.GetStats())
-		}
-	}()
-	res, err = in.c.ListPodSandboxStats(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ListPodSandboxStats(ctx context.Context, r *runtime.ListPodSandboxStatsRequest) (*runtime.ListPodSandboxStatsResponse, error) {
+	return call(ctx, in, r, in.c.ListPodSandboxStats, untraced,
+		tracef("ListPodSandboxStats with filter %+v", r.GetFilter()),
+		errorf("ListPodSandboxStats failed"),
+		func(res *runtime.ListPodSandboxStatsResponse) logLine {
+			return tracef("ListPodSandboxStats returns stats %+v", res.GetStats())
+		})
 }
 
-func (in *instrumentedService) ListContainerStats(ctx context.Context, r *runtime.ListContainerStatsRequest) (res *runtime.ListContainerStatsResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("ListContainerStats with filter %+v", r.GetFilter())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Error("ListContainerStats failed")
-		} else {
-			log.G(ctx).Tracef("ListContainerStats returns stats %+v", res.GetStats())
-		}
-	}()
-	res, err = in.c.ListContainerStats(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ListContainerStats(ctx context.Context, r *runtime.ListContainerStatsRequest) (*runtime.ListContainerStatsResponse, error) {
+	return call(ctx, in, r, in.c.ListContainerStats, untraced,
+		tracef("ListContainerStats with filter %+v", r.GetFilter()),
+		errorf("ListContainerStats failed"),
+		func(res *runtime.ListContainerStatsResponse) logLine {
+			return tracef("ListContainerStats returns stats %+v", res.GetStats())
+		})
 }
 
-func (in *instrumentedService) Status(ctx context.Context, r *runtime.StatusRequest) (res *runtime.StatusResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("Status")
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Error("Status failed")
-		} else {
-			log.G(ctx).Tracef("Status returns status %+v", res.GetStatus())
-		}
-	}()
-	res, err = in.c.Status(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) Status(ctx context.Context, r *runtime.StatusRequest) (*runtime.StatusResponse, error) {
+	return call(ctx, in, r, in.c.Status, untraced,
+		tracef("Status"),
+		errorf("Status failed"),
+		func(res *runtime.StatusResponse) logLine {
+			return tracef("Status returns status %+v", res.GetStatus())
+		})
 }
 
-func (in *instrumentedService) Version(ctx context.Context, r *runtime.VersionRequest) (res *runtime.VersionResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Tracef("Version with client side version %q", r.GetVersion())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Error("Version failed")
-		} else {
-			log.G(ctx).Tracef("Version returns %+v", res)
-		}
-	}()
-	res, err = in.c.Version(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) Version(ctx context.Context, r *runtime.VersionRequest) (*runtime.VersionResponse, error) {
+	return call(ctx, in, r, in.c.Version, untraced,
+		tracef("Version with client side version %q", r.GetVersion()),
+		errorf("Version failed"),
+		func(res *runtime.VersionResponse) logLine {
+			return tracef("Version returns %+v", res)
+		})
 }
 
-func (in *instrumentedService) UpdateRuntimeConfig(ctx context.Context, r *runtime.UpdateRuntimeConfigRequest) (res *runtime.UpdateRuntimeConfigResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Debugf("UpdateRuntimeConfig with config %+v", r.GetRuntimeConfig())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Error("UpdateRuntimeConfig failed")
-		} else {
-			log.G(ctx).Debug("UpdateRuntimeConfig returns successfully")
-		}
-	}()
-	res, err = in.c.UpdateRuntimeConfig(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) UpdateRuntimeConfig(ctx context.Context, r *runtime.UpdateRuntimeConfigRequest) (*runtime.UpdateRuntimeConfigResponse, error) {
+	return call(ctx, in, r, in.c.UpdateRuntimeConfig, untraced,
+		debugf("UpdateRuntimeConfig with config %+v", r.GetRuntimeConfig()),
+		errorf("UpdateRuntimeConfig failed"),
+		func(*runtime.UpdateRuntimeConfigResponse) logLine {
+			return debugf("UpdateRuntimeConfig returns successfully")
+		})
 }
 
-func (in *instrumentedService) ReopenContainerLog(ctx context.Context, r *runtime.ReopenContainerLogRequest) (res *runtime.ReopenContainerLogResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Debugf("ReopenContainerLog for %q", r.GetContainerId())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("ReopenContainerLog for %q failed", r.GetContainerId())
-		} else {
-			log.G(ctx).Debugf("ReopenContainerLog for %q returns successfully", r.GetContainerId())
-		}
-	}()
-	res, err = in.c.ReopenContainerLog(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) ReopenContainerLog(ctx context.Context, r *runtime.ReopenContainerLogRequest) (*runtime.ReopenContainerLogResponse, error) {
+	return call(ctx, in, r, in.c.ReopenContainerLog, untraced,
+		debugf("ReopenContainerLog for %q", r.GetContainerId()),
+		errorf("ReopenContainerLog for %q failed", r.GetContainerId()),
+		func(*runtime.ReopenContainerLogResponse) logLine {
+			return debugf("ReopenContainerLog for %q returns successfully", r.GetContainerId())
+		})
 }
 
-func (in *instrumentedService) CheckpointContainer(ctx context.Context, r *runtime.CheckpointContainerRequest) (res *runtime.CheckpointContainerResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("CheckpointContainer failed, error")
-		} else {
-			log.G(ctx).Debug("CheckpointContainer returns successfully")
-		}
-	}()
-
-	res, err = in.c.CheckpointContainer(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) CheckpointContainer(ctx context.Context, r *runtime.CheckpointContainerRequest) (*runtime.CheckpointContainerResponse, error) {
+	return call(ctx, in, r, in.c.CheckpointContainer, untraced,
+		logLine{},
+		errorf("CheckpointContainer failed, error"),
+		func(*runtime.CheckpointContainerResponse) logLine {
+			return debugf("CheckpointContainer returns successfully")
+		})
 }
 
 func (in *instrumentedService) GetContainerEvents(r *runtime.GetEventsRequest, s runtime.RuntimeService_GetContainerEventsServer) (err error) {
@@ -663,20 +476,13 @@ func (in *instrumentedService) RuntimeConfig(ctx context.Context, r *runtime.Run
 	return res, errgrpc.ToGRPC(err)
 }
 
-func (in *instrumentedService) UpdatePodSandboxResources(ctx context.Context, r *runtime.UpdatePodSandboxResourcesRequest) (res *runtime.UpdatePodSandboxResourcesResponse, err error) {
-	if err := in.checkInitialized(); err != nil {
-		return nil, err
-	}
-	log.G(ctx).Infof("UpdatePodSandboxResources for %q with Overhead: %+v / Resources: %+v", r.GetPodSandboxId(), r.GetOverhead(), r.GetResources())
-	defer func() {
-		if err != nil {
-			log.G(ctx).WithError(err).Errorf("UpdatePodSandboxResources for %q failed", r.GetPodSandboxId())
-		} else {
-			log.G(ctx).Infof("UpdatePodSandboxResources for %q returns successfully", r.GetPodSandboxId())
-		}
-	}()
-	res, err = in.c.UpdatePodSandboxResources(ctrdutil.WithNamespace(ctx), r)
-	return res, errgrpc.ToGRPC(err)
+func (in *instrumentedService) UpdatePodSandboxResources(ctx context.Context, r *runtime.UpdatePodSandboxResourcesRequest) (*runtime.UpdatePodSandboxResourcesResponse, error) {
+	return call(ctx, in, r, in.c.UpdatePodSandboxResources, untraced,
+		infof("UpdatePodSandboxResources for %q with Overhead: %+v / Resources: %+v", r.GetPodSandboxId(), r.GetOverhead(), r.GetResources()),
+		errorf("UpdatePodSandboxResources for %q failed", r.GetPodSandboxId()),
+		func(*runtime.UpdatePodSandboxResourcesResponse) logLine {
+			return infof("UpdatePodSandboxResources for %q returns successfully", r.GetPodSandboxId())
+		})
 }
 
 // withNamespaceContext wraps a server streaming server to inject the
