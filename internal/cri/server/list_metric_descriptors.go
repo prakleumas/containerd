@@ -17,6 +17,8 @@
 package server
 
 import (
+	"slices"
+
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
@@ -133,7 +135,7 @@ var (
 	containerMemoryFailuresTotal = &runtime.MetricDescriptor{
 		Name:      "container_memory_failures_total",
 		Help:      "Cumulative count of container memory allocation failures.",
-		LabelKeys: append(append([]string(nil), baseLabelKeys...), "failure_type", "scope"),
+		LabelKeys: slices.Concat(baseLabelKeys, []string{"failure_type", "scope"}),
 	}
 	containerOomEventsTotal = &runtime.MetricDescriptor{
 		Name:      "container_oom_events_total",
@@ -191,7 +193,7 @@ var (
 	containerBlkioDeviceUsageTotal = &runtime.MetricDescriptor{
 		Name:      "container_blkio_device_usage_total",
 		Help:      "Blkio device bytes usage",
-		LabelKeys: append(append([]string(nil), diskLabelKeys...), "major", "minor", "operation"),
+		LabelKeys: slices.Concat(diskLabelKeys, []string{"major", "minor", "operation"}),
 	}
 )
 
@@ -269,7 +271,7 @@ var (
 	containerUlimitsSoft = &runtime.MetricDescriptor{
 		Name:      "container_ulimits_soft",
 		Help:      "Soft ulimit values for the container root process. Unlimited if -1, except priority and nice",
-		LabelKeys: append(append([]string(nil), baseLabelKeys...), "ulimit"),
+		LabelKeys: slices.Concat(baseLabelKeys, []string{"ulimit"}),
 	}
 )
 

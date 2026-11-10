@@ -24,6 +24,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -155,7 +156,7 @@ func (c *criService) collectPodSandboxMetrics(ctx context.Context, sandbox sandb
 	}
 
 	// container and image label is set to "" as these are pod level metrics
-	podLabels := append(append([]string(nil), labels...), "", sandbox.ID, "")
+	podLabels := slices.Concat(labels, []string{"", sandbox.ID, ""})
 	timestamp := time.Now().UnixNano()
 
 	// Collect pod-level network metrics
@@ -165,7 +166,7 @@ func (c *criService) collectPodSandboxMetrics(ctx context.Context, sandbox sandb
 			return nil, err
 		}
 
-		podNetworkLabels := append(append([]string(nil), podLabels...), defaultIfName)
+		podNetworkLabels := slices.Concat(podLabels, []string{defaultIfName})
 		podMetrics.Metrics = append(podMetrics.Metrics,
 			counter(containerNetworkReceiveBytesTotal, timestamp, podNetworkLabels, linkStats.RxBytes),
 			counter(containerNetworkReceivePacketsTotal, timestamp, podNetworkLabels, linkStats.RxPackets),
@@ -207,7 +208,7 @@ func (c *criService) collectContainerMetrics(ctx context.Context, container cont
 		return nil, fmt.Errorf("unexpected metrics type: %T from %s", taskMetricsAny, reflect.TypeOf(taskMetricsAny).Elem().PkgPath())
 	}
 
-	containerLabels := append(append([]string(nil), labels...), container.Config.Metadata.Name, container.ID, container.Config.Image.UserSpecifiedImage)
+	containerLabels := slices.Concat(labels, []string{container.Config.Metadata.Name, container.ID, container.Config.Image.UserSpecifiedImage})
 	timestamp := time.Now().UnixNano()
 
 	containerMetrics := &runtime.ContainerMetrics{
@@ -328,8 +329,8 @@ func (c *criService) extractMemoryMetrics(stats cgroupMetrics, labels []string, 
 				gauge(containerMemoryMappedFile, timestamp, labels, s.Memory.TotalMappedFile),
 				gauge(containerMemoryTotalActiveFileBytes, timestamp, labels, s.Memory.TotalActiveFile),
 				gauge(containerMemoryTotalInactiveFileBytes, timestamp, labels, s.Memory.TotalInactiveFile),
-				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgfault", "container"), s.Memory.PgFault),
-				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgmajfault", "container"), s.Memory.PgMajFault),
+				counter(containerMemoryFailuresTotal, timestamp, slices.Concat(labels, []string{"pgfault", "container"}), s.Memory.PgFault),
+				counter(containerMemoryFailuresTotal, timestamp, slices.Concat(labels, []string{"pgmajfault", "container"}), s.Memory.PgMajFault),
 			)
 
 			if s.Memory.Kernel != nil {
@@ -367,8 +368,8 @@ func (c *criService) extractMemoryMetrics(stats cgroupMetrics, labels []string, 
 				gauge(containerMemoryTotalActiveFileBytes, timestamp, labels, s.Memory.ActiveFile),
 				gauge(containerMemoryTotalInactiveFileBytes, timestamp, labels, s.Memory.InactiveFile),
 				// TODO how to get hierarchical ?
-				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgfault", "container"), s.Memory.Pgfault),
-				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgmajfault", "container"), s.Memory.Pgmajfault),
+				counter(containerMemoryFailuresTotal, timestamp, slices.Concat(labels, []string{"pgfault", "container"}), s.Memory.Pgfault),
+				counter(containerMemoryFailuresTotal, timestamp, slices.Concat(labels, []string{"pgmajfault", "container"}), s.Memory.Pgmajfault),
 			)
 
 		}
@@ -391,16 +392,16 @@ func (c *criService) extractDiskIOMetrics(stats cgroupMetrics, labels []string, 
 		if s.Blkio != nil {
 			// Process blkio device usage stats
 			for _, entry := range s.Blkio.IoServiceBytesRecursive {
-				metrics = append(metrics, counter(containerBlkioDeviceUsageTotal, timestamp, append(append([]string(nil), labels...), entry.Device, strconv.FormatUint(entry.Major, 10), strconv.FormatUint(entry.Minor, 10), entry.Op), entry.Value))
+				metrics = append(metrics, counter(containerBlkioDeviceUsageTotal, timestamp, slices.Concat(labels, []string{entry.Device, strconv.FormatUint(entry.Major, 10), strconv.FormatUint(entry.Minor, 10), entry.Op}), entry.Value))
 			}
 
 			// Process filesystem read/write stats
 			for _, entry := range s.Blkio.IoServicedRecursive {
 				switch strings.ToLower(entry.Op) {
 				case "read":
-					metrics = append(metrics, counter(containerFsReadsTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
+					metrics = append(metrics, counter(containerFsReadsTotal, timestamp, slices.Concat(labels, []string{entry.Device}), entry.Value))
 				case "write":
-					metrics = append(metrics, counter(containerFsWritesTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
+					metrics = append(metrics, counter(containerFsWritesTotal, timestamp, slices.Concat(labels, []string{entry.Device}), entry.Value))
 				}
 			}
 
@@ -408,9 +409,9 @@ func (c *criService) extractDiskIOMetrics(stats cgroupMetrics, labels []string, 
 			for _, entry := range s.Blkio.IoServiceBytesRecursive {
 				switch strings.ToLower(entry.Op) {
 				case "read":
-					metrics = append(metrics, counter(containerFsReadsBytesTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
+					metrics = append(metrics, counter(containerFsReadsBytesTotal, timestamp, slices.Concat(labels, []string{entry.Device}), entry.Value))
 				case "write":
-					metrics = append(metrics, counter(containerFsWritesBytesTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
+					metrics = append(metrics, counter(containerFsWritesBytesTotal, timestamp, slices.Concat(labels, []string{entry.Device}), entry.Value))
 				}
 			}
 		}
@@ -423,10 +424,10 @@ func (c *criService) extractDiskIOMetrics(stats cgroupMetrics, labels []string, 
 			for _, entry := range s.Io.Usage {
 				device := fmt.Sprintf("%d:%d", entry.Major, entry.Minor)
 				metrics = append(metrics,
-					counter(containerFsReadsBytesTotal, timestamp, append(append([]string(nil), labels...), device), entry.Rbytes),
-					counter(containerFsWritesBytesTotal, timestamp, append(append([]string(nil), labels...), device), entry.Wbytes),
-					counter(containerFsReadsTotal, timestamp, append(append([]string(nil), labels...), device), entry.Rios),
-					counter(containerFsWritesTotal, timestamp, append(append([]string(nil), labels...), device), entry.Wios),
+					counter(containerFsReadsBytesTotal, timestamp, slices.Concat(labels, []string{device}), entry.Rbytes),
+					counter(containerFsWritesBytesTotal, timestamp, slices.Concat(labels, []string{device}), entry.Wbytes),
+					counter(containerFsReadsTotal, timestamp, slices.Concat(labels, []string{device}), entry.Rios),
+					counter(containerFsWritesTotal, timestamp, slices.Concat(labels, []string{device}), entry.Wios),
 				)
 
 			}
@@ -470,7 +471,7 @@ func (c *criService) extractProcessMetrics(ctx context.Context, task containerd.
 
 	if taskSpec != nil && taskSpec.Process != nil {
 		for _, rlimit := range taskSpec.Process.Rlimits {
-			metrics = append(metrics, gauge(containerUlimitsSoft, timestamp, append(append([]string(nil), labels...), rlimit.Type), rlimit.Soft))
+			metrics = append(metrics, gauge(containerUlimitsSoft, timestamp, slices.Concat(labels, []string{rlimit.Type}), rlimit.Soft))
 		}
 	}
 
@@ -602,10 +603,10 @@ func (c *criService) extractFilesystemMetrics(ctx context.Context, container con
 	// TODO: These are wrong, but I (fionera) don't know the internals enough to correctly fetch
 	// the correct device metrics.
 	metrics := []*runtime.Metric{
-		gauge(containerFsUsageBytes, timestamp, append(append([]string(nil), labels...), "/"), usedBytes),
-		gauge(containerFsLimitBytes, timestamp, append(append([]string(nil), labels...), "/"), limit),
-		gauge(containerFsInodesTotal, timestamp, append(append([]string(nil), labels...), "/"), inodes),
-		gauge(containerFsInodesFree, timestamp, append(append([]string(nil), labels...), "/"), inodesFree),
+		gauge(containerFsUsageBytes, timestamp, slices.Concat(labels, []string{"/"}), usedBytes),
+		gauge(containerFsLimitBytes, timestamp, slices.Concat(labels, []string{"/"}), limit),
+		gauge(containerFsInodesTotal, timestamp, slices.Concat(labels, []string{"/"}), inodes),
+		gauge(containerFsInodesFree, timestamp, slices.Concat(labels, []string{"/"}), inodesFree),
 	}
 
 	return metrics, nil
