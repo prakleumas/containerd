@@ -65,9 +65,9 @@ func taskID(id, namespace string) string {
 
 type entry struct {
 	task common.Statable
-	// ns is an optional child namespace that contains additional to parent labels.
-	// This can be used to append task specific labels to be able to differentiate the different containerd metrics.
-	ns *metrics.Namespace
+	// descs holds the descriptor of each collector metric, by index. They
+	// carry any task specific labels passed to Add.
+	descs []*prometheus.Desc
 }
 
 // Collector provides the ability to collect container stats and export
@@ -137,12 +137,8 @@ func (c *Collector) collect(entry entry, ch chan<- prometheus.Metric) {
 		return
 	}
 
-	ns := entry.ns
-	if ns == nil {
-		ns = c.ns
-	}
-	for _, m := range c.metrics {
-		m.collect(t.ID(), t.Namespace(), s, ns, ch)
+	for i, m := range c.metrics {
+		m.collect(t.ID(), t.Namespace(), s, entry.descs[i], ch)
 	}
 }
 
@@ -159,9 +155,13 @@ func (c *Collector) Add(t common.Statable, labels map[string]string) error {
 		return nil // requests to collect metrics should be idempotent
 	}
 
-	entry := entry{task: t}
+	ns := c.ns
 	if labels != nil {
-		entry.ns = c.ns.WithConstLabels(labels)
+		ns = c.ns.WithConstLabels(labels)
+	}
+	entry := entry{task: t, descs: make([]*prometheus.Desc, len(c.metrics))}
+	for i, m := range c.metrics {
+		entry.descs[i] = m.desc(ns)
 	}
 
 	c.mu.Lock()

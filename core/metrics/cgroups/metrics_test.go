@@ -127,6 +127,26 @@ func TestRegressionIssue6772(t *testing.T) {
 	}
 }
 
+func BenchmarkCollect(b *testing.B) {
+	collector := v2.NewCollector(metrics.NewNamespace("bench", "", nil))
+	if err := collector.Add(&statsT{mockStatT{id: "bench", namespace: "bench"}}, nil); err != nil {
+		b.Fatal(err)
+	}
+
+	ch := make(chan prometheus.Metric)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for range ch {
+		}
+	}()
+	for b.Loop() {
+		collector.Collect(ch)
+	}
+	close(ch)
+	<-done
+}
+
 type Collector interface {
 	Collect(ch chan<- prometheus.Metric)
 
@@ -151,4 +171,16 @@ func (t *mockStatT) Stats(context.Context) (*types.Any, error) {
 		return typeurl.MarshalAnyToProto(&v1types.Metrics{})
 	}
 	return typeurl.MarshalAnyToProto(&v2types.Metrics{})
+}
+
+// statsT reports cgroup v2 stats that populate the pid, CPU, and memory
+// metrics.
+type statsT struct{ mockStatT }
+
+func (t *statsT) Stats(context.Context) (*types.Any, error) {
+	return typeurl.MarshalAnyToProto(&v2types.Metrics{
+		Pids:   &v2types.PidsStat{},
+		CPU:    &v2types.CPUStat{},
+		Memory: &v2types.MemoryStat{},
+	})
 }

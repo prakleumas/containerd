@@ -47,9 +47,9 @@ func (m *metric) desc(ns *metrics.Namespace) *prometheus.Desc {
 	return ns.NewDesc(m.name, m.help, m.unit, append([]string{IDName, "namespace"}, m.labels...)...)
 }
 
-func (m *metric) collect(id, namespace string, stats *v2.Metrics, ns *metrics.Namespace, ch chan<- prometheus.Metric) {
+func (m *metric) collect(id, namespace string, stats *v2.Metrics, desc *prometheus.Desc, ch chan<- prometheus.Metric) {
 	values := m.getValues(stats)
 	for _, v := range values {
-		ch <- prometheus.MustNewConstMetric(m.desc(ns), m.vt, v.v, append([]string{id, namespace}, v.l...)...)
+		ch <- prometheus.MustNewConstMetric(desc, m.vt, v.v, append([]string{id, namespace}, v.l...)...)
 	}
 }
