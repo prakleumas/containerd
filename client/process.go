@@ -166,17 +166,24 @@ func (p *process) Kill(ctx context.Context, s syscall.Signal, opts ...KillOpts) 
 }
 
 func (p *process) Wait(ctx context.Context) (<-chan ExitStatus, error) {
+	return waitProcess(ctx, p.task.client, p.task.id, p.id, "process.Wait",
+		tracing.WithAttribute("process.id", p.ID()),
+		tracing.WithAttribute("process.task.id", p.task.ID()),
+	), nil
+}
+
+// waitProcess returns a channel that receives the exit status of process
+// execID in container containerID; an empty execID names the init process.
+// The span starts and ends in the goroutine that waits.
+func waitProcess(ctx context.Context, client *Client, containerID, execID, spanName string, spanOpts ...tracing.SpanOpt) <-chan ExitStatus {
 	c := make(chan ExitStatus, 1)
 	go func() {
 		defer close(c)
-		ctx, span := tracing.StartSpan(ctx, "process.Wait",
-			tracing.WithAttribute("process.id", p.ID()),
-			tracing.WithAttribute("process.task.id", p.task.ID()),
-		)
+		ctx, span := tracing.StartSpan(ctx, spanName, spanOpts...)
 		defer span.End()
-		r, err := p.task.client.TaskService().Wait(ctx, &tasks.WaitRequest{
-			ContainerID: p.task.id,
-			ExecID:      p.id,
+		r, err := client.TaskService().Wait(ctx, &tasks.WaitRequest{
+			ContainerID: containerID,
+			ExecID:      execID,
 		})
 		if err != nil {
 			c <- ExitStatus{
@@ -190,24 +197,30 @@ func (p *process) Wait(ctx context.Context) (<-chan ExitStatus, error) {
 			exitedAt: protobuf.FromTimestamp(r.ExitedAt),
 		}
 	}()
-	return c, nil
+	return c
 }
 
 func (p *process) CloseIO(ctx context.Context, opts ...IOCloserOpts) error {
-	ctx, span := tracing.StartSpan(ctx, "process.CloseIO",
+	return closeIO(ctx, p.task.client, p.task.id, p.id, opts, "process.CloseIO",
 		tracing.WithAttribute("process.id", p.ID()),
 	)
+}
+
+// closeIO closes the IO of process execID in container containerID; an empty
+// execID names the init process.
+func closeIO(ctx context.Context, client *Client, containerID, execID string, opts []IOCloserOpts, spanName string, spanOpts ...tracing.SpanOpt) error {
+	ctx, span := tracing.StartSpan(ctx, spanName, spanOpts...)
 	defer span.End()
 	r := &tasks.CloseIORequest{
-		ContainerID: p.task.id,
-		ExecID:      p.id,
+		ContainerID: containerID,
+		ExecID:      execID,
 	}
 	var i IOCloseInfo
 	for _, o := range opts {
 		o(&i)
 	}
 	r.Stdin = i.Stdin
-	_, err := p.task.client.TaskService().CloseIO(ctx, r)
+	_, err := client.TaskService().CloseIO(ctx, r)
 	return errgrpc.ToNative(err)
 }
 

@@ -340,30 +340,9 @@ func (t *task) Status(ctx context.Context) (Status, error) {
 }
 
 func (t *task) Wait(ctx context.Context) (<-chan ExitStatus, error) {
-	c := make(chan ExitStatus, 1)
-	go func() {
-		defer close(c)
-		ctx, span := tracing.StartSpan(ctx, "task.Wait",
-			tracing.WithAttribute("task.id", t.ID()),
-		)
-		defer span.End()
-		r, err := t.client.TaskService().Wait(ctx, &tasks.WaitRequest{
-			ContainerID: t.id,
-		})
-		if err != nil {
-			c <- ExitStatus{
-				code: UnknownExitStatus,
-				err:  err,
-			}
-			return
-		}
-
-		c <- ExitStatus{
-			code:     r.ExitStatus,
-			exitedAt: protobuf.FromTimestamp(r.ExitedAt),
-		}
-	}()
-	return c, nil
+	return waitProcess(ctx, t.client, t.id, "", "task.Wait",
+		tracing.WithAttribute("task.id", t.ID()),
+	), nil
 }
 
 // Delete deletes the task and its runtime state
@@ -506,21 +485,9 @@ func (t *task) Pids(ctx context.Context) ([]ProcessInfo, error) {
 }
 
 func (t *task) CloseIO(ctx context.Context, opts ...IOCloserOpts) error {
-	ctx, span := tracing.StartSpan(ctx, "task.CloseIO",
+	return closeIO(ctx, t.client, t.id, "", opts, "task.CloseIO",
 		tracing.WithAttribute("task.id", t.ID()),
 	)
-	defer span.End()
-	r := &tasks.CloseIORequest{
-		ContainerID: t.id,
-	}
-	var i IOCloseInfo
-	for _, o := range opts {
-		o(&i)
-	}
-	r.Stdin = i.Stdin
-
-	_, err := t.client.TaskService().CloseIO(ctx, r)
-	return errgrpc.ToNative(err)
 }
 
 func (t *task) IO() cio.IO {
