@@ -51,7 +51,6 @@ type commandConfig struct {
 	GRPCAddress  string
 	TTRPCAddress string
 	WorkDir      string
-	Args         []string
 	Opts         *types.Any
 	Env          []string
 	LogLevel     log.Level
@@ -93,10 +92,6 @@ func command(ctx context.Context, config *commandConfig) (*exec.Cmd, error) {
 	}
 
 	args = append(args, config.Action)
-
-	if len(config.Args) > 0 {
-		args = append(args, config.Args...)
-	}
 
 	cmd := exec.CommandContext(ctx, config.RuntimePath, args...)
 	cmd.Dir = config.WorkDir

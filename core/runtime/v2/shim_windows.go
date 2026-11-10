@@ -32,8 +32,6 @@ import (
 )
 
 type deferredPipeConnection struct {
-	ctx context.Context
-
 	wg   sync.WaitGroup
 	once sync.Once
 
@@ -68,9 +66,7 @@ func openShimLog(ctx context.Context, bundle *Bundle, dialer func(string, time.D
 	if err != nil {
 		return nil, err
 	}
-	dpc := &deferredPipeConnection{
-		ctx: ctx,
-	}
+	dpc := &deferredPipeConnection{}
 	dpc.wg.Go(func() {
 		c, conerr := dialer(
 			fmt.Sprintf("\\\\.\\pipe\\containerd-shim-%s-%s-log", ns, bundle.ID),
