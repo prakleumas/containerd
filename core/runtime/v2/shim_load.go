@@ -174,13 +174,7 @@ func (m *ShimManager) loadShim(ctx context.Context, bundle *Bundle) error {
 			env:          m.env,
 		})
 	// TODO: It seems we can only call loadShim here if it is a sandbox shim?
-	shim, err := loadShimTask(ctx, bundle, func() {
-		log.G(ctx).WithField("id", id).Info("shim disconnected")
-
-		cleanupAfterDeadShim(context.WithoutCancel(ctx), id, m.shims, m.events, binaryCall)
-		// Remove self from the runtime task list.
-		m.shims.Delete(ctx, id)
-	})
+	shim, err := loadShimTask(ctx, bundle, m.onShimDisconnect(ctx, id, binaryCall))
 	if err != nil {
 		cleanupAfterDeadShim(context.WithoutCancel(ctx), id, m.shims, m.events, binaryCall)
 		return fmt.Errorf("unable to load shim %q: %w", id, err)

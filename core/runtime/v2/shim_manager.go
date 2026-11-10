@@ -293,16 +293,7 @@ func (m *ShimManager) Start(ctx context.Context, id string, bundle *Bundle, opts
 			socketDir:    m.socketDir,
 			env:          m.env,
 		})
-		shim, err := loadShim(ctx, bundle, func() {
-			log.G(ctx).WithField("id", id).Info("shim disconnected")
-
-			cleanupAfterDeadShim(context.WithoutCancel(ctx), id, m.shims, m.events, b)
-			// Remove self from the runtime task list. Even though the cleanupAfterDeadShim()
-			// would publish taskExit event, but the shim.Delete() would always failed with ttrpc
-			// disconnect and there is no chance to remove this dead task from runtime task lists.
-			// Thus it's better to delete it here.
-			m.shims.Delete(ctx, id)
-		})
+		shim, err := loadShim(ctx, bundle, m.onShimDisconnect(ctx, id, b))
 		if err != nil {
 			return nil, fmt.Errorf("failed to load sandbox task %q: %w", opts.SandboxID, err)
 		}
@@ -368,16 +359,7 @@ func (m *ShimManager) startShim(ctx context.Context, bundle *Bundle, id string, 
 		socketDir:    m.socketDir,
 		env:          m.env,
 	})
-	shim, err := b.Start(ctx, typeurl.MarshalProto(topts), func() {
-		log.G(ctx).WithField("id", id).Info("shim disconnected")
-
-		cleanupAfterDeadShim(context.WithoutCancel(ctx), id, m.shims, m.events, b)
-		// Remove self from the runtime task list. Even though the cleanupAfterDeadShim()
-		// would publish taskExit event, but the shim.Delete() would always failed with ttrpc
-		// disconnect and there is no chance to remove this dead task from runtime task lists.
-		// Thus it's better to delete it here.
-		m.shims.Delete(ctx, id)
-	})
+	shim, err := b.Start(ctx, typeurl.MarshalProto(topts), m.onShimDisconnect(ctx, id, b))
 	if err != nil {
 		return nil, fmt.Errorf("start failed: %w", err)
 	}
@@ -494,6 +476,21 @@ func (m *ShimManager) resolveRuntimePath(runtime string) (string, error) {
 	}
 
 	return cmdPath, nil
+}
+
+// onShimDisconnect returns the onClose callback for shim id run by b. It
+// cleans up after the dead shim and removes it from the runtime task list.
+func (m *ShimManager) onShimDisconnect(ctx context.Context, id string, b *binary) func() {
+	return func() {
+		log.G(ctx).WithField("id", id).Info("shim disconnected")
+
+		cleanupAfterDeadShim(context.WithoutCancel(ctx), id, m.shims, m.events, b)
+		// Remove self from the runtime task list. Even though the cleanupAfterDeadShim()
+		// would publish taskExit event, but the shim.Delete() would always failed with ttrpc
+		// disconnect and there is no chance to remove this dead task from runtime task lists.
+		// Thus it's better to delete it here.
+		m.shims.Delete(ctx, id)
+	}
 }
 
 // cleanupShim attempts to properly delete and cleanup shim after error
