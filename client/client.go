@@ -32,6 +32,7 @@ import (
 	containersapi "github.com/containerd/containerd/api/services/containers/v1"
 	diffapi "github.com/containerd/containerd/api/services/diff/v1"
 	imagesapi "github.com/containerd/containerd/api/services/images/v1"
+	introspectionapi "github.com/containerd/containerd/api/services/introspection/v1"
 	leasesapi "github.com/containerd/containerd/api/services/leases/v1"
 	namespacesapi "github.com/containerd/containerd/api/services/namespaces/v1"
 	sandboxsapi "github.com/containerd/containerd/api/services/sandbox/v1"
@@ -930,39 +931,35 @@ func (c *Client) getSnapshotter(ctx context.Context, name string) (snapshots.Sna
 // GetSnapshotterSupportedPlatforms returns a platform matchers which represents the
 // supported platforms for the given snapshotters
 func (c *Client) GetSnapshotterSupportedPlatforms(ctx context.Context, snapshotterName string) (platforms.MatchComparer, error) {
-	filters := []string{fmt.Sprintf("type==%s, id==%s", plugins.SnapshotPlugin, snapshotterName)}
-	in := c.IntrospectionService()
-
-	resp, err := in.Plugins(ctx, filters...)
+	sn, err := c.snapshotterPlugin(ctx, snapshotterName)
 	if err != nil {
 		return nil, err
 	}
-
-	if len(resp.Plugins) <= 0 {
-		return nil, fmt.Errorf("inspection service could not find snapshotter %s plugin", snapshotterName)
-	}
-
-	sn := resp.Plugins[0]
 	snPlatforms := apitypes.OCIPlatformFromProto(sn.Platforms)
 	return platforms.Any(snPlatforms...), nil
 }
 
 // GetSnapshotterCapabilities returns the capabilities of a snapshotter.
 func (c *Client) GetSnapshotterCapabilities(ctx context.Context, snapshotterName string) ([]string, error) {
-	filters := []string{fmt.Sprintf("type==%s, id==%s", plugins.SnapshotPlugin, snapshotterName)}
-	in := c.IntrospectionService()
-
-	resp, err := in.Plugins(ctx, filters...)
+	sn, err := c.snapshotterPlugin(ctx, snapshotterName)
 	if err != nil {
 		return nil, err
 	}
+	return sn.Capabilities, nil
+}
 
-	if len(resp.Plugins) <= 0 {
+// snapshotterPlugin returns the introspection entry of a snapshotter plugin.
+func (c *Client) snapshotterPlugin(ctx context.Context, snapshotterName string) (*introspectionapi.Plugin, error) {
+	filter := fmt.Sprintf("type==%s, id==%s", plugins.SnapshotPlugin, snapshotterName)
+	resp, err := c.IntrospectionService().Plugins(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Plugins) == 0 {
 		return nil, fmt.Errorf("inspection service could not find snapshotter %s plugin", snapshotterName)
 	}
 
-	sn := resp.Plugins[0]
-	return sn.Capabilities, nil
+	return resp.Plugins[0], nil
 }
 
 type RuntimeVersion struct {
