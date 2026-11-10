@@ -41,6 +41,7 @@ import (
 	"github.com/containerd/containerd/v2/core/runtime"
 	v2 "github.com/containerd/containerd/v2/core/runtime/v2"
 	"github.com/containerd/containerd/v2/core/sandbox"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 )
 
@@ -53,20 +54,16 @@ func init() {
 			plugins.EventPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			shimPlugin, err := ic.GetSingle(plugins.ShimPlugin)
+			shims, err := plugindep.GetSingle[*v2.ShimManager](ic, plugins.ShimPlugin)
 			if err != nil {
 				return nil, err
 			}
 
-			exchangePlugin, err := ic.GetByID(plugins.EventPlugin, "exchange")
+			publisher, err := plugindep.GetByID[*exchange.Exchange](ic, plugins.EventPlugin, "exchange")
 			if err != nil {
 				return nil, err
 			}
 
-			var (
-				shims     = shimPlugin.(*v2.ShimManager)
-				publisher = exchangePlugin.(*exchange.Exchange)
-			)
 			state := ic.Properties[plugins.PropertyStateDir]
 			root := ic.Properties[plugins.PropertyRootDir]
 			for _, d := range []string{root, state} {

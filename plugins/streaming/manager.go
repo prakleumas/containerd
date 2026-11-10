@@ -24,6 +24,7 @@ import (
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/streaming"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	"github.com/containerd/containerd/v2/plugins"
@@ -40,7 +41,7 @@ func init() {
 			plugins.MetadataPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
@@ -49,7 +50,7 @@ func init() {
 				streams: map[string]map[string]*managedStream{},
 				byLease: map[string]map[string]map[string]struct{}{},
 			}
-			md.(*metadata.DB).RegisterCollectibleResource(metadata.ResourceStream, sm)
+			md.RegisterCollectibleResource(metadata.ResourceStream, sm)
 			return sm, nil
 		},
 	})

@@ -49,6 +49,7 @@ import (
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/runtime"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/containerd/v2/pkg/blockio"
 	"github.com/containerd/containerd/v2/pkg/deprecation"
@@ -102,22 +103,22 @@ func init() {
 func initFunc(ic *plugin.InitContext) (any, error) {
 	config := ic.Config.(*Config)
 
-	v2r, err := ic.GetByID(plugins.RuntimePluginV2, "task")
+	v2r, err := plugindep.GetByID[runtime.PlatformRuntime](ic, plugins.RuntimePluginV2, "task")
 	if err != nil {
 		return nil, err
 	}
 
-	m, err := ic.GetSingle(plugins.MetadataPlugin)
+	db, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 	if err != nil {
 		return nil, err
 	}
 
-	ep, err := ic.GetSingle(plugins.EventPlugin)
+	ep, err := plugindep.GetSingle[events.Publisher](ic, plugins.EventPlugin)
 	if err != nil {
 		return nil, err
 	}
 
-	monitor, err := ic.GetSingle(plugins.TaskMonitorPlugin)
+	monitor, err := plugindep.GetSingle[runtime.TaskMonitor](ic, plugins.TaskMonitorPlugin)
 	if err != nil {
 		if !errors.Is(err, plugin.ErrPluginNotFound) {
 			return nil, err
@@ -125,19 +126,18 @@ func initFunc(ic *plugin.InitContext) (any, error) {
 		monitor = runtime.NewNoopMonitor()
 	}
 
-	warnings, err := ic.GetSingle(plugins.WarningPlugin)
+	warnings, err := plugindep.GetSingle[warning.Service](ic, plugins.WarningPlugin)
 	if err != nil {
 		return nil, err
 	}
 
-	db := m.(*metadata.DB)
 	l := &local{
 		containers: metadata.NewContainerStore(db),
 		store:      db.ContentStore(),
-		publisher:  ep.(events.Publisher),
-		monitor:    monitor.(runtime.TaskMonitor),
-		v2Runtime:  v2r.(runtime.PlatformRuntime),
-		warnings:   warnings.(warning.Service),
+		publisher:  ep,
+		monitor:    monitor,
+		v2Runtime:  v2r,
+		warnings:   warnings,
 	}
 
 	v2Tasks, err := l.v2Runtime.Tasks(ic.Context, true)

@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/containerd/containerd/v2/core/streaming"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
 )
@@ -50,11 +51,11 @@ func init() {
 			plugins.StreamingPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			i, err := ic.GetByID(plugins.StreamingPlugin, "manager")
+			i, err := plugindep.GetByID[streaming.StreamManager](ic, plugins.StreamingPlugin, "manager")
 			if err != nil {
 				return nil, err
 			}
-			return &service{manager: i.(streaming.StreamManager)}, nil
+			return &service{manager: i}, nil
 		},
 	})
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/containerd/containerd/v2/core/streaming"
 	"github.com/containerd/containerd/v2/core/transfer"
 	tplugins "github.com/containerd/containerd/v2/core/transfer/plugins"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
@@ -62,7 +63,7 @@ type service struct {
 }
 
 func newService(ic *plugin.InitContext) (any, error) {
-	sps, err := ic.GetByType(plugins.TransferPlugin)
+	sps, err := plugindep.GetByType[transfer.Transferrer](ic, plugins.TransferPlugin)
 	if err != nil {
 		return nil, err
 	}
@@ -70,15 +71,15 @@ func newService(ic *plugin.InitContext) (any, error) {
 	// TODO: how to determine order?
 	t := make([]transfer.Transferrer, 0, len(sps))
 	for _, p := range sps {
-		t = append(t, p.(transfer.Transferrer))
+		t = append(t, p)
 	}
-	sp, err := ic.GetByID(plugins.StreamingPlugin, "manager")
+	sp, err := plugindep.GetByID[streaming.StreamManager](ic, plugins.StreamingPlugin, "manager")
 	if err != nil {
 		return nil, err
 	}
 	return &service{
 		transferrers:  t,
-		streamManager: sp.(streaming.StreamManager),
+		streamManager: sp,
 	}, nil
 }
 

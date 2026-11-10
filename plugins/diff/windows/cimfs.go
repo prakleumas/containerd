@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
@@ -51,7 +52,7 @@ func init() {
 			plugins.MetadataPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
@@ -60,7 +61,7 @@ func init() {
 				return nil, fmt.Errorf("host windows version doesn't support CimFS: %w", plugin.ErrSkipPlugin)
 			}
 			ic.Meta.Platforms = append(ic.Meta.Platforms, platforms.DefaultSpec())
-			return NewCimDiff(md.(*metadata.DB).ContentStore())
+			return NewCimDiff(md.ContentStore())
 		},
 	})
 
@@ -75,13 +76,13 @@ func init() {
 				return nil, fmt.Errorf("host OS doesn't support writable block CIMs: %w", plugin.ErrSkipPlugin)
 			}
 
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
 
 			ic.Meta.Platforms = append(ic.Meta.Platforms, platforms.DefaultSpec())
-			return NewBlockCimDiff(md.(*metadata.DB).ContentStore())
+			return NewBlockCimDiff(md.ContentStore())
 		},
 	})
 }

@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
@@ -55,7 +56,7 @@ func init() {
 			plugins.MetadataPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
@@ -64,7 +65,7 @@ func init() {
 				OS:           "linux",
 				Architecture: runtime.GOARCH,
 			})
-			return NewWindowsLcowDiff(md.(*metadata.DB).ContentStore())
+			return NewWindowsLcowDiff(md.ContentStore())
 		},
 	})
 }

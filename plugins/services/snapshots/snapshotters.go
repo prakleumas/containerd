@@ -18,6 +18,7 @@ package snapshots
 
 import (
 	"github.com/containerd/containerd/v2/core/metadata"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services"
 	"github.com/containerd/plugin"
@@ -32,12 +33,12 @@ func init() {
 			plugins.MetadataPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			m, err := ic.GetSingle(plugins.MetadataPlugin)
+			m, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
 
-			return m.(*metadata.DB).Snapshotters(), nil
+			return m.Snapshotters(), nil
 		},
 	})
 }

@@ -39,6 +39,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/containerd/v2/pkg/archive/compression"
 	"github.com/containerd/containerd/v2/pkg/epoch"
@@ -54,13 +55,13 @@ func init() {
 			plugins.MetadataPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
 
 			ic.Meta.Platforms = append(ic.Meta.Platforms, platforms.DefaultSpec())
-			return NewWindowsDiff(md.(*metadata.DB).ContentStore())
+			return NewWindowsDiff(md.ContentStore())
 		},
 	})
 }

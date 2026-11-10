@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/internal/dmverity"
 	"github.com/containerd/containerd/v2/internal/erofsutils"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/diff/erofs"
 )
@@ -77,7 +78,7 @@ func init() {
 				}
 			}
 
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
@@ -88,7 +89,7 @@ func init() {
 			// Select this differ for EROFS native images by default
 			p.OSFeatures = []string{"erofs"}
 			ic.Meta.Platforms = append(ic.Meta.Platforms, p)
-			cs := md.(*metadata.DB).ContentStore()
+			cs := md.ContentStore()
 
 			var opts []erofs.DifferOpt
 

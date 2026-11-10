@@ -21,6 +21,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/leases"
 	"github.com/containerd/containerd/v2/core/metadata"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/plugin"
@@ -36,17 +37,17 @@ func init() {
 			plugins.GCPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			m, err := ic.GetSingle(plugins.MetadataPlugin)
+			m, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
-			g, err := ic.GetSingle(plugins.GCPlugin)
+			g, err := plugindep.GetSingle[gcScheduler](ic, plugins.GCPlugin)
 			if err != nil {
 				return nil, err
 			}
 			return &local{
-				Manager: metadata.NewLeaseManager(m.(*metadata.DB)),
-				gc:      g.(gcScheduler),
+				Manager: metadata.NewLeaseManager(m),
+				gc:      g,
 			}, nil
 		},
 	})

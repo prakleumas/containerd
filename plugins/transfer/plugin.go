@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/containerd/v2/core/unpack"
 	"github.com/containerd/containerd/v2/defaults"
 	"github.com/containerd/containerd/v2/internal/kmutex"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/imageverifier"
 	"github.com/containerd/containerd/v2/plugins"
 	specs "github.com/opencontainers/image-spec/specs-go/v1"
@@ -58,29 +59,21 @@ func init() {
 		Config: defaultConfig(),
 		InitFn: func(ic *plugin.InitContext) (any, error) {
 			config := ic.Config.(*transferConfig)
-			m, err := ic.GetSingle(plugins.MetadataPlugin)
+			ms, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
-			ms := m.(*metadata.DB)
 
 			var lc local.TransferConfig
 
-			l, err := ic.GetSingle(plugins.LeasePlugin)
+			lc.Leases, err = plugindep.GetSingle[leases.Manager](ic, plugins.LeasePlugin)
 			if err != nil {
 				return nil, err
 			}
-			lc.Leases = l.(leases.Manager)
 
-			vps, err := ic.GetByType(plugins.ImageVerifierPlugin)
+			lc.Verifiers, err = plugindep.GetByType[imageverifier.ImageVerifier](ic, plugins.ImageVerifierPlugin)
 			if err != nil && !errors.Is(err, plugin.ErrPluginNotFound) {
 				return nil, err
-			}
-			if len(vps) > 0 {
-				lc.Verifiers = make(map[string]imageverifier.ImageVerifier)
-				for name, vp := range vps {
-					lc.Verifiers[name] = vp.(imageverifier.ImageVerifier)
-				}
 			}
 
 			// Set configuration based on default or user input

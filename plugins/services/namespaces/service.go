@@ -20,6 +20,7 @@ import (
 	"context"
 
 	api "github.com/containerd/containerd/api/services/namespaces/v1"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services"
@@ -36,11 +37,11 @@ func init() {
 			plugins.ServicePlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			i, err := ic.GetByID(plugins.ServicePlugin, services.NamespacesService)
+			i, err := plugindep.GetByID[api.NamespacesClient](ic, plugins.ServicePlugin, services.NamespacesService)
 			if err != nil {
 				return nil, err
 			}
-			return &service{local: i.(api.NamespacesClient)}, nil
+			return &service{local: i}, nil
 		},
 	})
 }

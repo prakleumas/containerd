@@ -20,6 +20,7 @@ import (
 	"context"
 
 	diffapi "github.com/containerd/containerd/api/services/diff/v1"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services"
 	"github.com/containerd/plugin"
@@ -35,11 +36,11 @@ func init() {
 			plugins.ServicePlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			i, err := ic.GetByID(plugins.ServicePlugin, services.DiffService)
+			i, err := plugindep.GetByID[diffapi.DiffClient](ic, plugins.ServicePlugin, services.DiffService)
 			if err != nil {
 				return nil, err
 			}
-			return &service{local: i.(diffapi.DiffClient)}, nil
+			return &service{local: i}, nil
 		},
 	})
 }

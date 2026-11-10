@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/internal/tomlext"
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/plugins"
@@ -99,14 +100,9 @@ func init() {
 			StartupDelay:      tomlext.FromStdTime(100 * time.Millisecond),
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			mdCollector, err := plugindep.GetSingle[collector](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
-			}
-
-			mdCollector, ok := md.(collector)
-			if !ok {
-				return nil, fmt.Errorf("%s %T must implement collector", plugins.MetadataPlugin, md)
 			}
 
 			m := newScheduler(mdCollector, ic.Config.(*config))

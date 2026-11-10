@@ -32,6 +32,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/events"
 	"github.com/containerd/containerd/v2/core/metadata"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/namespaces"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
@@ -49,17 +50,17 @@ func init() {
 			plugins.MetadataPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			m, err := ic.GetSingle(plugins.MetadataPlugin)
+			m, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
-			ep, err := ic.GetSingle(plugins.EventPlugin)
+			ep, err := plugindep.GetSingle[events.Publisher](ic, plugins.EventPlugin)
 			if err != nil {
 				return nil, err
 			}
 			return &local{
-				db:        m.(*metadata.DB),
-				publisher: ep.(events.Publisher),
+				db:        m,
+				publisher: ep,
 			}, nil
 		},
 	})

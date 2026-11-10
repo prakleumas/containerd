@@ -27,6 +27,7 @@ import (
 	"github.com/containerd/plugin"
 	"github.com/containerd/plugin/registry"
 
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/sys"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/server/internal"
@@ -56,7 +57,7 @@ func init() {
 				return nil, plugin.ErrSkipPlugin
 			}
 
-			p, err := ic.GetByID(plugins.HTTPHandler, "pprof")
+			p, err := plugindep.GetByID[*http.Server](ic, plugins.HTTPHandler, "pprof")
 			if err != nil {
 				if errors.Is(err, plugin.ErrPluginNotFound) {
 					log.G(ic.Context).Warn("debug server is specified but pprof plugin not found, skipping debug server")
@@ -66,7 +67,7 @@ func init() {
 			}
 
 			return server{
-				handler: p.(*http.Server),
+				handler: p,
 				config:  *c,
 			}, nil
 		},

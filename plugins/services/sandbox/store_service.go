@@ -29,6 +29,7 @@ import (
 	"github.com/containerd/plugin/registry"
 
 	"github.com/containerd/containerd/v2/core/sandbox"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 )
 
@@ -40,12 +41,12 @@ func init() {
 			plugins.SandboxStorePlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			sp, err := ic.GetByID(plugins.SandboxStorePlugin, "local")
+			sp, err := plugindep.GetByID[sandbox.Store](ic, plugins.SandboxStorePlugin, "local")
 			if err != nil {
 				return nil, err
 			}
 
-			return &sandboxService{store: sp.(sandbox.Store)}, nil
+			return &sandboxService{store: sp}, nil
 		},
 	})
 }

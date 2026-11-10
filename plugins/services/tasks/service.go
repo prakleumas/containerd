@@ -20,6 +20,7 @@ import (
 	"context"
 
 	api "github.com/containerd/containerd/api/services/tasks/v1"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services"
@@ -40,11 +41,11 @@ func init() {
 			plugins.ServicePlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			i, err := ic.GetByID(plugins.ServicePlugin, services.TasksService)
+			i, err := plugindep.GetByID[api.TasksClient](ic, plugins.ServicePlugin, services.TasksService)
 			if err != nil {
 				return nil, err
 			}
-			return &service{local: i.(api.TasksClient)}, nil
+			return &service{local: i}, nil
 		},
 	})
 }

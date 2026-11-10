@@ -18,6 +18,7 @@ package nri
 
 import (
 	"github.com/containerd/containerd/v2/internal/nri"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services/warning"
 	"github.com/containerd/plugin"
@@ -38,12 +39,12 @@ func init() {
 }
 
 func initFunc(ic *plugin.InitContext) (any, error) {
-	ws, err := ic.GetSingle(plugins.WarningPlugin)
+	ws, err := plugindep.GetSingle[warning.Service](ic, plugins.WarningPlugin)
 	if err != nil {
 		return nil, err
 	}
 
-	l, err := nri.New(ic.Config.(*nri.Config), ws.(warning.Service))
+	l, err := nri.New(ic.Config.(*nri.Config), ws)
 
 	return l, err
 }

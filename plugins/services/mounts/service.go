@@ -29,6 +29,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/mount/proxy"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
 )
@@ -43,11 +44,11 @@ func init() {
 			plugins.MountManagerPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			i, err := ic.GetSingle(plugins.MountManagerPlugin)
+			i, err := plugindep.GetSingle[mount.Manager](ic, plugins.MountManagerPlugin)
 			if err != nil {
 				return nil, err
 			}
-			return &service{mm: i.(mount.Manager)}, nil
+			return &service{mm: i}, nil
 		},
 	})
 }

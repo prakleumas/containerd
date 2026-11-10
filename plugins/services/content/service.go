@@ -18,6 +18,7 @@ package content
 
 import (
 	"github.com/containerd/containerd/v2/core/content"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services"
 	"github.com/containerd/containerd/v2/plugins/services/content/contentserver"
@@ -33,11 +34,11 @@ func init() {
 			plugins.ServicePlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			cs, err := ic.GetByID(plugins.ServicePlugin, services.ContentService)
+			cs, err := plugindep.GetByID[content.Store](ic, plugins.ServicePlugin, services.ContentService)
 			if err != nil {
 				return nil, err
 			}
-			return contentserver.New(cs.(content.Store)), nil
+			return contentserver.New(cs), nil
 		},
 	})
 }

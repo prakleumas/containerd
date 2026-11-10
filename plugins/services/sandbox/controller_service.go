@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"time"
 
 	"google.golang.org/grpc"
@@ -36,6 +37,7 @@ import (
 	"github.com/containerd/containerd/v2/core/events"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/sandbox"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/protobuf"
 	"github.com/containerd/containerd/v2/plugins"
 )
@@ -52,20 +54,16 @@ func init() {
 		InitFn: func(ic *plugin.InitContext) (any, error) {
 			sc := make(map[string]sandbox.Controller)
 
-			sandboxers, err := ic.GetByType(plugins.PodSandboxPlugin)
+			sandboxers, err := plugindep.GetByType[sandbox.Controller](ic, plugins.PodSandboxPlugin)
 			if err == nil {
-				for name, p := range sandboxers {
-					sc[name] = p.(sandbox.Controller)
-				}
+				maps.Copy(sc, sandboxers)
 			} else if !errors.Is(err, plugin.ErrPluginNotFound) {
 				return nil, err
 			}
 
-			sandboxersV2, err := ic.GetByType(plugins.SandboxControllerPlugin)
+			sandboxersV2, err := plugindep.GetByType[sandbox.Controller](ic, plugins.SandboxControllerPlugin)
 			if err == nil {
-				for name, p := range sandboxersV2 {
-					sc[name] = p.(sandbox.Controller)
-				}
+				maps.Copy(sc, sandboxersV2)
 			} else if !errors.Is(err, plugin.ErrPluginNotFound) {
 				return nil, err
 			}
@@ -74,14 +72,14 @@ func init() {
 				return nil, fmt.Errorf("no sandbox controllers initialized: %w", plugin.ErrPluginNotFound)
 			}
 
-			ep, err := ic.GetSingle(plugins.EventPlugin)
+			ep, err := plugindep.GetSingle[events.Publisher](ic, plugins.EventPlugin)
 			if err != nil {
 				return nil, err
 			}
 
 			return &controllerService{
 				sc:        sc,
-				publisher: ep.(events.Publisher),
+				publisher: ep,
 			}, nil
 		},
 	})

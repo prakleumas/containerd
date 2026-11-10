@@ -23,6 +23,7 @@ import (
 	"github.com/containerd/containerd/v2/core/diff/apply"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/mount"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/diff/walking"
 	"github.com/containerd/platforms"
@@ -39,20 +40,18 @@ func init() {
 			plugins.MountManagerPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
 
-			var mm mount.Manager
-			if mountsI, err := ic.GetSingle(plugins.MountManagerPlugin); err == nil {
-				mm = mountsI.(mount.Manager)
-			} else if !errors.Is(err, plugin.ErrPluginNotFound) {
+			mm, err := plugindep.GetSingle[mount.Manager](ic, plugins.MountManagerPlugin)
+			if err != nil && !errors.Is(err, plugin.ErrPluginNotFound) {
 				return nil, err
 			}
 
 			ic.Meta.Platforms = append(ic.Meta.Platforms, platforms.DefaultSpec())
-			cs := md.(*metadata.DB).ContentStore()
+			cs := md.ContentStore()
 
 			return diffPlugin{
 				Comparer: walking.NewWalkingDiff(cs),

@@ -31,6 +31,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/images"
 	"github.com/containerd/containerd/v2/core/metadata"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/epoch"
 	"github.com/containerd/containerd/v2/pkg/gc"
 	"github.com/containerd/containerd/v2/pkg/oci"
@@ -52,23 +53,23 @@ func init() {
 			plugins.WarningPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			m, err := ic.GetSingle(plugins.MetadataPlugin)
+			m, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
-			g, err := ic.GetSingle(plugins.GCPlugin)
+			g, err := plugindep.GetSingle[gcScheduler](ic, plugins.GCPlugin)
 			if err != nil {
 				return nil, err
 			}
-			w, err := ic.GetSingle(plugins.WarningPlugin)
+			w, err := plugindep.GetSingle[warning.Service](ic, plugins.WarningPlugin)
 			if err != nil {
 				return nil, err
 			}
 
 			return &local{
-				store:    metadata.NewImageStore(m.(*metadata.DB)),
-				gc:       g.(gcScheduler),
-				warnings: w.(warning.Service),
+				store:    metadata.NewImageStore(m),
+				gc:       g,
+				warnings: w,
 			}, nil
 		},
 	})

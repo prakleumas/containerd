@@ -32,6 +32,7 @@ import (
 
 	"github.com/containerd/containerd/v2/core/events"
 	"github.com/containerd/containerd/v2/core/events/exchange"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/protobuf"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
@@ -47,11 +48,11 @@ func init() {
 			plugins.EventPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			ep, err := ic.GetByID(plugins.EventPlugin, "exchange")
+			ep, err := plugindep.GetByID[*exchange.Exchange](ic, plugins.EventPlugin, "exchange")
 			if err != nil {
 				return nil, err
 			}
-			return NewService(ep.(*exchange.Exchange)), nil
+			return NewService(ep), nil
 		},
 	})
 }

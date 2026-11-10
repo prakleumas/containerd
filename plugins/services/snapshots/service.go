@@ -30,6 +30,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/proxy"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services"
@@ -54,11 +55,11 @@ type service struct {
 }
 
 func newService(ic *plugin.InitContext) (any, error) {
-	i, err := ic.GetByID(plugins.ServicePlugin, services.SnapshotsService)
+	ss, err := plugindep.GetByID[map[string]snapshots.Snapshotter](ic, plugins.ServicePlugin, services.SnapshotsService)
 	if err != nil {
 		return nil, err
 	}
-	return &service{ss: i.(map[string]snapshots.Snapshotter)}, nil
+	return &service{ss: ss}, nil
 }
 
 func (s *service) getSnapshotter(name string) (snapshots.Snapshotter, error) {

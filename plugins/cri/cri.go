@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/containerd/containerd/v2/internal/cri/server"
 	"github.com/containerd/containerd/v2/internal/cri/server/images"
 	nriservice "github.com/containerd/containerd/v2/internal/nri"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services/warning"
 	"github.com/containerd/containerd/v2/version"
@@ -73,13 +75,13 @@ func initCRIService(ic *plugin.InitContext) (any, error) {
 	config := ic.Config.(*criconfig.ServerConfig)
 
 	// Get runtime service.
-	criRuntimePlugin, err := ic.GetByID(plugins.CRIServicePlugin, "runtime")
+	runtimeSvc, err := plugindep.GetByID[server.RuntimeService](ic, plugins.CRIServicePlugin, "runtime")
 	if err != nil {
 		return nil, fmt.Errorf("unable to load CRI runtime service plugin dependency: %w", err)
 	}
 
 	// Get image service.
-	criImagePlugin, err := ic.GetByID(plugins.CRIServicePlugin, "images")
+	imageSvc, err := plugindep.GetByID[server.ImageService](ic, plugins.CRIServicePlugin, "images")
 	if err != nil {
 		return nil, fmt.Errorf("unable to load CRI image service plugin dependency: %w", err)
 	}
@@ -87,8 +89,6 @@ func initCRIService(ic *plugin.InitContext) (any, error) {
 	// Propagate runtime-specific snapshotters from runtime config to image service.
 	// This is needed because users may configure snapshotters in the runtime config
 	// (containerd.runtimes.<name>.snapshotter) which the image service needs for pulling.
-	runtimeSvc := criRuntimePlugin.(server.RuntimeService)
-	imageSvc := criImagePlugin.(server.ImageService)
 	runtimeConfig := runtimeSvc.Config()
 	imageConfig := imageSvc.Config()
 	if err := validateRuntimePlatforms(runtimeConfig.Runtimes, imageConfig.RuntimePlatforms); err != nil {
@@ -105,11 +105,10 @@ func initCRIService(ic *plugin.InitContext) (any, error) {
 		imageSvc.UpdateRuntime(runtimeName, imagePlatform)
 	}
 
-	ws, err := ic.GetSingle(plugins.WarningPlugin)
+	warn, err := plugindep.GetSingle[warning.Service](ic, plugins.WarningPlugin)
 	if err != nil {
 		return nil, err
 	}
-	warn := ws.(warning.Service)
 
 	if warnings, err := criconfig.ValidateServerConfig(ic.Context, config); err != nil {
 		return nil, fmt.Errorf("invalid cri image config: %w", err)
@@ -166,7 +165,7 @@ func initCRIService(ic *plugin.InitContext) (any, error) {
 		ShimPath:           shimPath,
 		WarningService:     warn,
 	}
-	is := criImagePlugin.(imageService).GRPCService()
+	is := imageSvc.(imageService).GRPCService()
 
 	s, rs, err := server.NewCRIService(options)
 	if err != nil {
@@ -262,21 +261,17 @@ func getNRIAPI(ic *plugin.InitContext) nriservice.API {
 
 func getSandboxControllers(ic *plugin.InitContext) (map[string]sandbox.Controller, error) {
 	sc := make(map[string]sandbox.Controller)
-	sandboxers, err := ic.GetByType(plugins.SandboxControllerPlugin)
+	sandboxers, err := plugindep.GetByType[sandbox.Controller](ic, plugins.SandboxControllerPlugin)
 	if err != nil {
 		return nil, err
 	}
-	for name, p := range sandboxers {
-		sc[name] = p.(sandbox.Controller)
-	}
+	maps.Copy(sc, sandboxers)
 
-	podSandboxers, err := ic.GetByType(plugins.PodSandboxPlugin)
+	podSandboxers, err := plugindep.GetByType[sandbox.Controller](ic, plugins.PodSandboxPlugin)
 	if err != nil {
 		return nil, err
 	}
-	for name, p := range podSandboxers {
-		sc[name] = p.(sandbox.Controller)
-	}
+	maps.Copy(sc, podSandboxers)
 	return sc, nil
 }
 

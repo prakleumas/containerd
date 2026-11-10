@@ -30,6 +30,7 @@ import (
 	criconfig "github.com/containerd/containerd/v2/internal/cri/config"
 	"github.com/containerd/containerd/v2/internal/cri/constants"
 	"github.com/containerd/containerd/v2/internal/cri/server/images"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services/warning"
 	"github.com/containerd/containerd/v2/version"
@@ -57,11 +58,10 @@ func init() {
 			plugins.WarningPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			m, err := ic.GetSingle(plugins.MetadataPlugin)
+			mdb, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
-			mdb := m.(*metadata.DB)
 
 			// only set the default value of config path, if both mirrors and
 			// config path are empty and we are on Linux.
@@ -76,11 +76,10 @@ func init() {
 			if warnings, err := criconfig.ValidateImageConfig(ic.Context, &config); err != nil {
 				return nil, fmt.Errorf("invalid cri image config: %w", err)
 			} else if len(warnings) > 0 {
-				ws, err := ic.GetSingle(plugins.WarningPlugin)
+				warn, err := plugindep.GetSingle[warning.Service](ic, plugins.WarningPlugin)
 				if err != nil {
 					return nil, err
 				}
-				warn := ws.(warning.Service)
 				for _, w := range warnings {
 					warn.Emit(ic.Context, w)
 				}
@@ -90,7 +89,7 @@ func init() {
 				criconfig.CheckLocalImagePullConfigs(ic.Context, &config)
 			}
 
-			ts, err := ic.GetSingle(plugins.TransferPlugin)
+			ts, err := plugindep.GetSingle[transfer.Transferrer](ic, plugins.TransferPlugin)
 			if err != nil {
 				return nil, err
 			}
@@ -100,7 +99,7 @@ func init() {
 				RuntimePlatforms: map[string]*images.ImagePlatform{},
 				Snapshotters:     map[string]snapshots.Snapshotter{},
 				ImageFSPaths:     map[string]string{},
-				Transferrer:      ts.(transfer.Transferrer),
+				Transferrer:      ts,
 			}
 
 			ctrdCli, err := containerd.New(

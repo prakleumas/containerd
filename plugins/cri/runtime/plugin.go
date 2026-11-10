@@ -32,6 +32,7 @@ import (
 
 	criconfig "github.com/containerd/containerd/v2/internal/cri/config"
 	"github.com/containerd/containerd/v2/internal/cri/constants"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/oci"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/containerd/v2/plugins/services/warning"
@@ -64,11 +65,10 @@ func initCRIRuntime(ic *plugin.InitContext) (any, error) {
 	if warnings, err := criconfig.ValidateRuntimeConfig(ctx, pluginConfig); err != nil {
 		return nil, fmt.Errorf("invalid plugin config: %w", err)
 	} else if len(warnings) > 0 {
-		ws, err := ic.GetSingle(plugins.WarningPlugin)
+		warn, err := plugindep.GetSingle[warning.Service](ic, plugins.WarningPlugin)
 		if err != nil {
 			return nil, err
 		}
-		warn := ws.(warning.Service)
 		for _, w := range warnings {
 			warn.Emit(ctx, w)
 		}

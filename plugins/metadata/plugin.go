@@ -26,6 +26,7 @@ import (
 	"github.com/containerd/containerd/v2/core/events"
 	"github.com/containerd/containerd/v2/core/metadata"
 	"github.com/containerd/containerd/v2/core/snapshots"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/timeout"
 	"github.com/containerd/containerd/v2/plugins"
 	"github.com/containerd/errdefs"
@@ -109,22 +110,17 @@ func init() {
 			if err := os.MkdirAll(root, 0711); err != nil {
 				return nil, err
 			}
-			cs, err := ic.GetSingle(plugins.ContentPlugin)
+			cs, err := plugindep.GetSingle[content.Store](ic, plugins.ContentPlugin)
 			if err != nil {
 				return nil, err
 			}
 
-			snapshottersRaw, err := ic.GetByType(plugins.SnapshotPlugin)
+			snapshotters, err := plugindep.GetByType[snapshots.Snapshotter](ic, plugins.SnapshotPlugin)
 			if err != nil {
 				return nil, err
 			}
 
-			snapshotters := make(map[string]snapshots.Snapshotter)
-			for name, sn := range snapshottersRaw {
-				snapshotters[name] = sn.(snapshots.Snapshotter)
-			}
-
-			ep, err := ic.GetSingle(plugins.EventPlugin)
+			ep, err := plugindep.GetSingle[events.Publisher](ic, plugins.EventPlugin)
 			if err != nil {
 				return nil, err
 			}
@@ -188,14 +184,14 @@ func init() {
 			}
 
 			dbopts := []metadata.DBOpt{
-				metadata.WithEventsPublisher(ep.(events.Publisher)),
+				metadata.WithEventsPublisher(ep),
 			}
 
 			if !shared {
 				dbopts = append(dbopts, metadata.WithPolicyIsolated)
 			}
 
-			mdb := metadata.NewDB(db, cs.(content.Store), snapshotters, dbopts...)
+			mdb := metadata.NewDB(db, cs, snapshotters, dbopts...)
 			if err := mdb.Init(ic.Context); err != nil {
 				return nil, err
 			}

@@ -33,6 +33,7 @@ import (
 	"github.com/containerd/containerd/v2/core/metadata/boltutil"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/mount/manager"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/plugins"
 )
 
@@ -45,17 +46,17 @@ func init() {
 			plugins.MountHandlerPlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			md, err := ic.GetSingle(plugins.MetadataPlugin)
+			md, err := plugindep.GetSingle[*metadata.DB](ic, plugins.MetadataPlugin)
 			if err != nil {
 				return nil, err
 			}
-			hp, err := ic.GetByType(plugins.MountHandlerPlugin)
+			hp, err := plugindep.GetByType[mount.Handler](ic, plugins.MountHandlerPlugin)
 			if err != nil && !errors.Is(err, plugin.ErrPluginNotFound) {
 				return nil, err
 			}
 			var opts []manager.Opt
 			for k, v := range hp {
-				opts = append(opts, manager.WithMountHandler(k, v.(mount.Handler)))
+				opts = append(opts, manager.WithMountHandler(k, v))
 			}
 
 			root := ic.Properties[plugins.PropertyStateDir]
@@ -124,7 +125,7 @@ func init() {
 			}
 
 			if collector, ok := mm.(metadata.Collector); ok {
-				md.(*metadata.DB).RegisterCollectibleResource(metadata.ResourceMount, collector)
+				md.RegisterCollectibleResource(metadata.ResourceMount, collector)
 			}
 			return mm, nil
 		},

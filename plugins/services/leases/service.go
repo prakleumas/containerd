@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/containerd/containerd/v2/core/leases"
+	"github.com/containerd/containerd/v2/internal/plugindep"
 	"github.com/containerd/containerd/v2/pkg/protobuf"
 	ptypes "github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
@@ -41,11 +42,11 @@ func init() {
 			plugins.LeasePlugin,
 		},
 		InitFn: func(ic *plugin.InitContext) (any, error) {
-			i, err := ic.GetByID(plugins.LeasePlugin, "manager")
+			i, err := plugindep.GetByID[leases.Manager](ic, plugins.LeasePlugin, "manager")
 			if err != nil {
 				return nil, err
 			}
-			return &service{lm: i.(leases.Manager)}, nil
+			return &service{lm: i}, nil
 		},
 	})
 }
