@@ -18,6 +18,7 @@ package filters
 
 import (
 	"errors"
+	"strings"
 	"unicode/utf8"
 )
 
@@ -171,10 +172,10 @@ func unquote(s string) (string, error) {
 	s = s[1 : n-1]
 
 	if quote == '`' {
-		if contains(s, '`') {
+		if strings.IndexByte(s, '`') >= 0 {
 			return "", errQuoteSyntax
 		}
-		if contains(s, '\r') {
+		if strings.IndexByte(s, '\r') >= 0 {
 			// -1 because we know there is at least one \r to remove.
 			buf := make([]byte, 0, len(s)-1)
 			for i := 0; i < len(s); i++ {
@@ -189,12 +190,12 @@ func unquote(s string) (string, error) {
 	if quote != '"' && quote != '\'' && quote != '|' && quote != '/' {
 		return "", errQuoteSyntax
 	}
-	if contains(s, '\n') {
+	if strings.IndexByte(s, '\n') >= 0 {
 		return "", errQuoteSyntax
 	}
 
 	// Is it trivial?  Avoid allocation.
-	if !contains(s, '\\') && !contains(s, quote) {
+	if strings.IndexByte(s, '\\') < 0 && strings.IndexByte(s, quote) < 0 {
 		switch quote {
 		case '"', '/', '|': // pipe and slash are treated like double quote
 			return s, nil
@@ -226,16 +227,6 @@ func unquote(s string) (string, error) {
 		}
 	}
 	return string(buf), nil
-}
-
-// contains reports whether the string contains the byte c.
-func contains(s string, c byte) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] == c {
-			return true
-		}
-	}
-	return false
 }
 
 func unhex(b byte) (v rune, ok bool) {
