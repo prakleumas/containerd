@@ -129,17 +129,6 @@ var restoreCommand = &cli.Command{
 			log.G(ctx).WithError(err).Error("console resize")
 		}
 
-		status := <-statusC
-		code, _, err := status.Result()
-		if err != nil {
-			return err
-		}
-		if _, err := task.Delete(ctx); err != nil {
-			return err
-		}
-		if code != 0 {
-			return cli.Exit("", int(code))
-		}
-		return nil
+		return tasks.WaitAndDelete(ctx, task, statusC)
 	},
 }

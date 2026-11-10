@@ -281,18 +281,7 @@ var Command = &cli.Command{
 			sigc := commands.ForwardAllSignals(ctx, task)
 			defer commands.StopCatch(sigc)
 		}
-		status := <-statusC
-		code, _, err := status.Result()
-		if err != nil {
-			return err
-		}
-		if _, err := task.Delete(ctx); err != nil {
-			return err
-		}
-		if code != 0 {
-			return cli.Exit("", int(code))
-		}
-		return nil
+		return tasks.WaitAndDelete(ctx, task, statusC)
 	},
 }
 

@@ -130,17 +130,24 @@ var startCommand = &cli.Command{
 			defer commands.StopCatch(sigc)
 		}
 
-		status := <-statusC
-		code, _, err := status.Result()
-		if err != nil {
-			return err
-		}
-		if _, err := task.Delete(ctx); err != nil {
-			return err
-		}
-		if code != 0 {
-			return cli.Exit("", int(code))
-		}
-		return nil
+		return WaitAndDelete(ctx, task, statusC)
 	},
+}
+
+// WaitAndDelete receives the task's exit status from statusC, deletes the
+// task, and returns a cli exit error carrying the exit code when it is
+// nonzero.
+func WaitAndDelete(ctx context.Context, task containerd.Task, statusC <-chan containerd.ExitStatus) error {
+	status := <-statusC
+	code, _, err := status.Result()
+	if err != nil {
+		return err
+	}
+	if _, err := task.Delete(ctx); err != nil {
+		return err
+	}
+	if code != 0 {
+		return cli.Exit("", int(code))
+	}
+	return nil
 }
