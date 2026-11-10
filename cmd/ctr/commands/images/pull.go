@@ -363,16 +363,6 @@ func ProgressHandler(ctx context.Context, out io.Writer) (transfer.ProgressFunc,
 					node.Progress = p
 				}
 
-				/*
-					all := make([]transfer.Progress, 0, len(statuses))
-					for _, p := range statuses {
-						all = append(all, p.Progress)
-					}
-					sort.Slice(all, func(i, j int) bool {
-						return all[i].Name < all[j].Name
-					})
-					Display(fw, status, all, start)
-				*/
 				DisplayHierarchy(fw, status, roots, start)
 				fw.Flush()
 			case <-ctx.Done():
@@ -473,53 +463,4 @@ func shortenName(name string) string {
 		return "(" + name[7:19] + ")"
 	}
 	return name
-}
-
-// Display pretty prints out the download or upload progress
-// Status tree
-func Display(w io.Writer, status string, statuses []transfer.Progress, start time.Time) {
-	var total int64
-	for _, status := range statuses {
-		total += status.Progress
-		switch status.Event {
-		case "downloading", "uploading":
-			var bar progress.Bar
-			if status.Total > 0.0 {
-				bar = progress.Bar(float64(status.Progress) / float64(status.Total))
-			}
-			fmt.Fprintf(w, "%s:\t%s\t%40r\t%8.8s/%s\t\n",
-				status.Name,
-				status.Event,
-				bar,
-				progress.Bytes(status.Progress), progress.Bytes(status.Total))
-		case "resolving", "waiting":
-			bar := progress.Bar(0.0)
-			fmt.Fprintf(w, "%s:\t%s\t%40r\t\n",
-				status.Name,
-				status.Event,
-				bar)
-		case "complete", "done":
-			bar := progress.Bar(1.0)
-			fmt.Fprintf(w, "%s:\t%s\t%40r\t\n",
-				status.Name,
-				status.Event,
-				bar)
-		default:
-			fmt.Fprintf(w, "%s:\t%s\t\n",
-				status.Name,
-				status.Event)
-		}
-	}
-
-	// Print the Status line
-	fmt.Fprintf(w, "%s\telapsed: %-4.1fs\ttotal: %7.6v\t(%v)\t\n",
-		status,
-		time.Since(start).Seconds(),
-		// TODO(stevvooe): These calculations are actually way off.
-		// Need to account for previously downloaded data. These
-		// will basically be right for a download the first time
-		// but will be skewed if restarting, as it includes the
-		// data into the start time before.
-		progress.Bytes(total),
-		progress.NewBytesPerSecond(total, time.Since(start)))
 }
