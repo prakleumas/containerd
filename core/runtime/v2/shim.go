@@ -939,23 +939,7 @@ func (s *shimTask) Process(ctx context.Context, id string) (runtime.ExecProcess,
 }
 
 func (s *shimTask) State(ctx context.Context) (runtime.State, error) {
-	response, err := s.task.State(ctx, &task.StateRequest{
+	return taskState(ctx, s.task, &task.StateRequest{
 		ID: s.ID(),
 	})
-	if err != nil {
-		if !errors.Is(err, ttrpc.ErrClosed) {
-			return runtime.State{}, errgrpc.ToNative(err)
-		}
-		return runtime.State{}, errdefs.ErrNotFound
-	}
-	return runtime.State{
-		Pid:        response.Pid,
-		Status:     statusFromProto(response.Status),
-		Stdin:      response.Stdin,
-		Stdout:     response.Stdout,
-		Stderr:     response.Stderr,
-		Terminal:   response.Terminal,
-		ExitStatus: response.ExitStatus,
-		ExitedAt:   protobuf.FromTimestamp(response.ExitedAt),
-	}, nil
 }

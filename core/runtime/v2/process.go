@@ -69,10 +69,15 @@ func statusFromProto(from tasktypes.Status) runtime.Status {
 }
 
 func (p *process) State(ctx context.Context) (runtime.State, error) {
-	response, err := p.shim.task.State(ctx, &task.StateRequest{
+	return taskState(ctx, p.shim.task, &task.StateRequest{
 		ID:     p.shim.ID(),
 		ExecID: p.id,
 	})
+}
+
+// taskState requests the state of a task or exec process from the shim.
+func taskState(ctx context.Context, client TaskServiceClient, request *task.StateRequest) (runtime.State, error) {
+	response, err := client.State(ctx, request)
 	if err != nil {
 		if !errors.Is(err, ttrpc.ErrClosed) {
 			return runtime.State{}, errgrpc.ToNative(err)
