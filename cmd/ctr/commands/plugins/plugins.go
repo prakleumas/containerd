@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -154,20 +154,16 @@ var listCommand = &cli.Command{
 }
 
 func prettyPlatforms(pspb []*types.Platform) string {
-	psm := map[string]struct{}{}
+	ps := make([]string, 0, len(pspb))
 	for _, p := range pspb {
-		psm[platforms.Format(v1.Platform{
+		ps = append(ps, platforms.Format(v1.Platform{
 			OS:           p.OS,
 			Architecture: p.Architecture,
 			Variant:      p.Variant,
-		})] = struct{}{}
+		}))
 	}
-	var ps []string
-	for p := range psm {
-		ps = append(ps, p)
-	}
-	sort.Stable(sort.StringSlice(ps))
-	return strings.Join(ps, ",")
+	slices.Sort(ps)
+	return strings.Join(slices.Compact(ps), ",")
 }
 
 var inspectRuntimeCommand = &cli.Command{

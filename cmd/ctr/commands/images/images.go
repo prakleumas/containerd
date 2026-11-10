@@ -22,7 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"text/tabwriter"
 
@@ -112,16 +112,12 @@ var listCommand = &cli.Command{
 			if err != nil {
 				log.G(ctx).WithError(err).Errorf("failed resolving platform for image %s", image.Name)
 			} else if len(specs) > 0 {
-				psm := map[string]struct{}{}
+				ps := make([]string, 0, len(specs))
 				for _, p := range specs {
-					psm[platforms.Format(p)] = struct{}{}
+					ps = append(ps, platforms.Format(p))
 				}
-				var ps []string
-				for p := range psm {
-					ps = append(ps, p)
-				}
-				sort.Stable(sort.StringSlice(ps))
-				platformColumn = strings.Join(ps, ",")
+				slices.Sort(ps)
+				platformColumn = strings.Join(slices.Compact(ps), ",")
 			}
 
 			labels := cmp.Or(commands.FormatLabels(image.Labels), "-")
