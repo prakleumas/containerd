@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
+	"github.com/containerd/containerd/v2/plugins/snapshots/internal/metastore"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/log"
 	"github.com/containerd/plugin"
@@ -113,6 +114,7 @@ func withViewHookHelper(fn viewHookHelper) Opt {
 }
 
 type snapshotter struct {
+	metastore.Base
 	root    string
 	scratch string
 	fsType  string
@@ -121,6 +123,8 @@ type snapshotter struct {
 
 	testViewHookHelper viewHookHelper
 }
+
+var _ snapshots.Snapshotter = &snapshotter{}
 
 // NewSnapshotter returns a Snapshotter which copies layers on the underlying
 // file system. A metadata file is stored under the root.
@@ -175,6 +179,7 @@ func NewSnapshotter(root string, opts ...Opt) (snapshots.Snapshotter, error) {
 	}
 
 	return &snapshotter{
+		Base:    metastore.NewBase(ms),
 		root:    root,
 		scratch: scratch,
 		fsType:  config.fsType,
@@ -183,35 +188,6 @@ func NewSnapshotter(root string, opts ...Opt) (snapshots.Snapshotter, error) {
 
 		testViewHookHelper: config.testViewHookHelper,
 	}, nil
-}
-
-// Stat returns the info for an active or committed snapshot by name or
-// key.
-//
-// Should be used for parent resolution, existence checks and to discern
-// the kind of snapshot.
-func (o *snapshotter) Stat(ctx context.Context, key string) (info snapshots.Info, err error) {
-	err = o.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		_, info, _, err = storage.GetInfo(ctx, key)
-		return err
-	})
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
-}
-
-func (o *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (_ snapshots.Info, err error) {
-	err = o.ms.WithTransaction(ctx, true, func(ctx context.Context) error {
-		info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
-		return err
-	})
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
 }
 
 func (o *snapshotter) Usage(ctx context.Context, key string) (usage snapshots.Usage, err error) {
@@ -369,13 +345,6 @@ func (o *snapshotter) Remove(ctx context.Context, key string) (err error) {
 	return nil
 }
 
-// Walk the committed snapshots.
-func (o *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...string) error {
-	return o.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		return storage.WalkInfo(ctx, fn, fs...)
-	})
-}
-
 func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, key, parent string, opts []snapshots.Opt) (_ []mount.Mount, err error) {
 	var s storage.Snapshot
 
@@ -446,11 +415,6 @@ func (o *snapshotter) mounts(s storage.Snapshot) []mount.Mount {
 			Options: mountOptions,
 		},
 	}
-}
-
-// Close closes the snapshotter
-func (o *snapshotter) Close() error {
-	return o.ms.Close()
 }
 
 func copyFileWithSync(target, source string) error {

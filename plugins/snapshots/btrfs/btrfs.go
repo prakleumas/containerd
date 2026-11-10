@@ -31,15 +31,19 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
+	"github.com/containerd/containerd/v2/plugins/snapshots/internal/metastore"
 	"github.com/containerd/log"
 	"github.com/containerd/plugin"
 )
 
 type snapshotter struct {
+	metastore.Base
 	device string // device of the root
 	root   string // root provides paths for internal storage.
 	ms     *storage.MetaStore
 }
+
+var _ snapshots.Snapshotter = &snapshotter{}
 
 // NewSnapshotter returns a Snapshotter using btrfs. Uses the provided
 // root directory for snapshots and stores the metadata in
@@ -88,41 +92,11 @@ func NewSnapshotter(root string) (snapshots.Snapshotter, error) {
 	}
 
 	return &snapshotter{
+		Base:   metastore.NewBase(ms),
 		device: mnt.Source,
 		root:   root,
 		ms:     ms,
 	}, nil
-}
-
-// Stat returns the info for an active or committed snapshot by name or
-// key.
-//
-// Should be used for parent resolution, existence checks and to discern
-// the kind of snapshot.
-func (b *snapshotter) Stat(ctx context.Context, key string) (info snapshots.Info, err error) {
-	err = b.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		_, info, _, err = storage.GetInfo(ctx, key)
-		return err
-	})
-
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
-}
-
-func (b *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (_ snapshots.Info, err error) {
-	err = b.ms.WithTransaction(ctx, true, func(ctx context.Context) error {
-		info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
-		return err
-	})
-
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
 }
 
 // Usage retrieves the disk usage of the top-level snapshot.
@@ -166,13 +140,6 @@ func (b *snapshotter) usage(ctx context.Context, key string) (usage snapshots.Us
 	}
 
 	return usage, nil
-}
-
-// Walk the committed snapshots.
-func (b *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...string) (err error) {
-	return b.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		return storage.WalkInfo(ctx, fn, fs...)
-	})
 }
 
 func (b *snapshotter) Prepare(ctx context.Context, key, parent string, opts ...snapshots.Opt) ([]mount.Mount, error) {
@@ -375,9 +342,4 @@ func (b *snapshotter) Remove(ctx context.Context, key string) (err error) {
 	}
 
 	return nil
-}
-
-// Close closes the snapshotter
-func (b *snapshotter) Close() error {
-	return b.ms.Close()
 }

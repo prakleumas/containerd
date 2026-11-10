@@ -30,17 +30,19 @@ import (
 	"github.com/Microsoft/hcsshim"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
+	"github.com/containerd/containerd/v2/plugins/snapshots/internal/metastore"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/log"
 )
 
 // windowsBaseSnapshotter is a type that implements common functionality required by both windows & cimfs
 // snapshotters (sort of a base type that windows & cimfs snapshotter types derive from - however, windowsBaseSnapshotter does NOT implement the full Snapshotter interface).  Some functions
-// (like Stat, Update) that are identical for both snapshotters are directly implemented in this base
-// snapshotter and such functions handle database transaction creation etc. However, the functions that are
+// (like Stat, Update) that are identical for both snapshotters come from the embedded metastore.Base
+// and such functions handle database transaction creation etc. However, the functions that are
 // not common don't create a transaction to allow the caller the flexibility of deciding whether to commit or
 // abort the transaction.
 type windowsBaseSnapshotter struct {
+	metastore.Base
 	root string
 	ms   *storage.MetaStore
 	info hcsshim.DriverInfo
@@ -61,6 +63,7 @@ func newBaseSnapshotter(root string) (*windowsBaseSnapshotter, error) {
 	}
 
 	return &windowsBaseSnapshotter{
+		Base: metastore.NewBase(ms),
 		root: root,
 		ms:   ms,
 		info: hcsshim.DriverInfo{HomeDir: filepath.Join(root, "snapshots")},
@@ -77,30 +80,6 @@ func (w *windowsBaseSnapshotter) parentIDsToParentPaths(parentIDs []string) []st
 		parentLayerPaths = append(parentLayerPaths, w.getSnapshotDir(ID))
 	}
 	return parentLayerPaths
-}
-
-func (w *windowsBaseSnapshotter) Stat(ctx context.Context, key string) (info snapshots.Info, err error) {
-	err = w.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		_, info, _, err = storage.GetInfo(ctx, key)
-		return err
-	})
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
-}
-
-func (w *windowsBaseSnapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (_ snapshots.Info, err error) {
-	err = w.ms.WithTransaction(ctx, true, func(ctx context.Context) error {
-		info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
-		return err
-	})
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
 }
 
 func (w *windowsBaseSnapshotter) Usage(ctx context.Context, key string) (usage snapshots.Usage, err error) {
@@ -128,13 +107,6 @@ func (w *windowsBaseSnapshotter) Usage(ctx context.Context, key string) (usage s
 	}
 
 	return usage, nil
-}
-
-// Walk the committed snapshots.
-func (w *windowsBaseSnapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...string) error {
-	return w.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		return storage.WalkInfo(ctx, fn, fs...)
-	})
 }
 
 // preRemove prepares for removal of a snapshot by first renaming the snapshot directory and if that succeeds
@@ -191,11 +163,6 @@ func (w *windowsBaseSnapshotter) preRemove(ctx context.Context, key string) (str
 		return "", err
 	}
 	return renamedID, nil
-}
-
-// Close closes the snapshotter
-func (w *windowsBaseSnapshotter) Close() error {
-	return w.ms.Close()
 }
 
 // This handles creating the UVMs scratch layer.

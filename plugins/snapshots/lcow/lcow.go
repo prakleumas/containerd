@@ -37,6 +37,7 @@ import (
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
 	"github.com/containerd/containerd/v2/plugins"
+	"github.com/containerd/containerd/v2/plugins/snapshots/internal/metastore"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
@@ -67,11 +68,14 @@ const (
 )
 
 type snapshotter struct {
+	metastore.Base
 	root string
 	ms   *storage.MetaStore
 
 	scratchLock sync.Mutex
 }
+
+var _ snapshots.Snapshotter = &snapshotter{}
 
 // NewSnapshotter returns a new windows snapshotter
 func NewSnapshotter(root string) (snapshots.Snapshotter, error) {
@@ -96,38 +100,10 @@ func NewSnapshotter(root string) (snapshots.Snapshotter, error) {
 	}
 
 	return &snapshotter{
+		Base: metastore.NewBase(ms),
 		root: root,
 		ms:   ms,
 	}, nil
-}
-
-// Stat returns the info for an active or committed snapshot by name or
-// key.
-//
-// Should be used for parent resolution, existence checks and to discern
-// the kind of snapshot.
-func (s *snapshotter) Stat(ctx context.Context, key string) (info snapshots.Info, err error) {
-	err = s.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		_, info, _, err = storage.GetInfo(ctx, key)
-		return err
-	})
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
-}
-
-func (s *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (_ snapshots.Info, err error) {
-	err = s.ms.WithTransaction(ctx, true, func(ctx context.Context) error {
-		info, err = storage.UpdateInfo(ctx, info, fieldpaths...)
-		return err
-	})
-	if err != nil {
-		return snapshots.Info{}, err
-	}
-
-	return info, nil
 }
 
 func (s *snapshotter) Usage(ctx context.Context, key string) (usage snapshots.Usage, err error) {
@@ -243,18 +219,6 @@ func (s *snapshotter) Remove(ctx context.Context, key string) (err error) {
 	}
 
 	return nil
-}
-
-// Walk the committed snapshots.
-func (s *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...string) error {
-	return s.ms.WithTransaction(ctx, false, func(ctx context.Context) error {
-		return storage.WalkInfo(ctx, fn, fs...)
-	})
-}
-
-// Close closes the snapshotter
-func (s *snapshotter) Close() error {
-	return s.ms.Close()
 }
 
 func (s *snapshotter) mounts(sn storage.Snapshot) []mount.Mount {
