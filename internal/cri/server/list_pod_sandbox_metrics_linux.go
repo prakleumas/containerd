@@ -166,64 +166,16 @@ func (c *criService) collectPodSandboxMetrics(ctx context.Context, sandbox sandb
 		}
 
 		podNetworkLabels := append(append([]string(nil), podLabels...), defaultIfName)
-		podMetrics.Metrics = append(podMetrics.Metrics, []*runtime.Metric{
-			{
-				Name:        containerNetworkReceiveBytesTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.RxBytes},
-			},
-			{
-				Name:        containerNetworkReceivePacketsTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.RxPackets},
-			},
-			{
-				Name:        containerNetworkReceivePacketsDroppedTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.RxDropped},
-			},
-			{
-				Name:        containerNetworkReceiveErrorsTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.RxErrors},
-			},
-			{
-				Name:        containerNetworkTransmitBytesTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.TxBytes},
-			},
-			{
-				Name:        containerNetworkTransmitPacketsTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.TxPackets},
-			},
-			{
-				Name:        containerNetworkTransmitPacketsDroppedTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.TxDropped},
-			},
-			{
-				Name:        containerNetworkTransmitErrorsTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: podNetworkLabels,
-				Value:       &runtime.UInt64Value{Value: linkStats.TxErrors},
-			},
-		}...)
+		podMetrics.Metrics = append(podMetrics.Metrics,
+			counter(containerNetworkReceiveBytesTotal, timestamp, podNetworkLabels, linkStats.RxBytes),
+			counter(containerNetworkReceivePacketsTotal, timestamp, podNetworkLabels, linkStats.RxPackets),
+			counter(containerNetworkReceivePacketsDroppedTotal, timestamp, podNetworkLabels, linkStats.RxDropped),
+			counter(containerNetworkReceiveErrorsTotal, timestamp, podNetworkLabels, linkStats.RxErrors),
+			counter(containerNetworkTransmitBytesTotal, timestamp, podNetworkLabels, linkStats.TxBytes),
+			counter(containerNetworkTransmitPacketsTotal, timestamp, podNetworkLabels, linkStats.TxPackets),
+			counter(containerNetworkTransmitPacketsDroppedTotal, timestamp, podNetworkLabels, linkStats.TxDropped),
+			counter(containerNetworkTransmitErrorsTotal, timestamp, podNetworkLabels, linkStats.TxErrors),
+		)
 	}
 
 	return podMetrics, nil
@@ -263,22 +215,10 @@ func (c *criService) collectContainerMetrics(ctx context.Context, container cont
 	}
 
 	// miscellaneous metrics
-	containerMetrics.Metrics = append(containerMetrics.Metrics, []*runtime.Metric{
-		{
-			Name:        containerLastSeen.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: containerLabels,
-			Value:       &runtime.UInt64Value{Value: uint64(time.Now().Unix())},
-		},
-		{
-			Name:        containerStartTimeSeconds.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: containerLabels,
-			Value:       &runtime.UInt64Value{Value: uint64(container.Status.Get().StartedAt / int64(time.Second))},
-		},
-	}...)
+	containerMetrics.Metrics = append(containerMetrics.Metrics,
+		gauge(containerLastSeen, timestamp, containerLabels, uint64(time.Now().Unix())),
+		gauge(containerStartTimeSeconds, timestamp, containerLabels, uint64(container.Status.Get().StartedAt/int64(time.Second))),
+	)
 
 	cpuMetrics, err := c.extractCPUMetrics(metrics, containerLabels, timestamp)
 	if err != nil {
@@ -327,55 +267,19 @@ func (c *criService) extractCPUMetrics(stats cgroupMetrics, labels []string, tim
 		s := stats.v1
 
 		if s.CPU != nil && s.CPU.Usage != nil {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerCPUUsageSecondsTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: labels,
-				Value:       &runtime.UInt64Value{Value: s.CPU.Usage.Total / uint64(time.Second)},
-			})
+			metrics = append(metrics, counter(containerCPUUsageSecondsTotal, timestamp, labels, s.CPU.Usage.Total/uint64(time.Second)))
 
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerCPUUserSecondsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.CPU.Usage.User / uint64(time.Second)},
-				},
-				{
-					Name:        containerCPUSystemSecondsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.CPU.Usage.Kernel / uint64(time.Second)},
-				},
-			}...)
+			metrics = append(metrics,
+				counter(containerCPUUserSecondsTotal, timestamp, labels, s.CPU.Usage.User/uint64(time.Second)),
+				counter(containerCPUSystemSecondsTotal, timestamp, labels, s.CPU.Usage.Kernel/uint64(time.Second)),
+			)
 
 			if s.CPU.Throttling != nil {
-				metrics = append(metrics, []*runtime.Metric{
-					{
-						Name:        containerCPUCfsPeriodsTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: labels,
-						Value:       &runtime.UInt64Value{Value: s.CPU.Throttling.Periods},
-					},
-					{
-						Name:        containerCPUCfsThrottledPeriodsTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: labels,
-						Value:       &runtime.UInt64Value{Value: s.CPU.Throttling.ThrottledPeriods},
-					},
-					{
-						Name:        containerCPUCfsThrottledSecondsTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: labels,
-						Value:       &runtime.UInt64Value{Value: s.CPU.Throttling.ThrottledTime / uint64(time.Second)},
-					},
-				}...)
+				metrics = append(metrics,
+					counter(containerCPUCfsPeriodsTotal, timestamp, labels, s.CPU.Throttling.Periods),
+					counter(containerCPUCfsThrottledPeriodsTotal, timestamp, labels, s.CPU.Throttling.ThrottledPeriods),
+					counter(containerCPUCfsThrottledSecondsTotal, timestamp, labels, s.CPU.Throttling.ThrottledTime/uint64(time.Second)),
+				)
 			}
 		}
 
@@ -383,55 +287,19 @@ func (c *criService) extractCPUMetrics(stats cgroupMetrics, labels []string, tim
 		s := stats.v2
 
 		if s.CPU != nil {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerCPUUsageSecondsTotal.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_COUNTER,
-				LabelValues: labels,
-				Value:       &runtime.UInt64Value{Value: s.CPU.UsageUsec * 1000 / uint64(time.Second)},
-			})
+			metrics = append(metrics, counter(containerCPUUsageSecondsTotal, timestamp, labels, s.CPU.UsageUsec*1000/uint64(time.Second)))
 
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerCPUUserSecondsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.CPU.UserUsec * 1000 / uint64(time.Second)},
-				},
-				{
-					Name:        containerCPUSystemSecondsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.CPU.SystemUsec * 1000 / uint64(time.Second)},
-				},
-			}...)
+			metrics = append(metrics,
+				counter(containerCPUUserSecondsTotal, timestamp, labels, s.CPU.UserUsec*1000/uint64(time.Second)),
+				counter(containerCPUSystemSecondsTotal, timestamp, labels, s.CPU.SystemUsec*1000/uint64(time.Second)),
+			)
 
 			// Always include CFS throttling metrics, even if zero
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerCPUCfsPeriodsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.CPU.NrPeriods},
-				},
-				{
-					Name:        containerCPUCfsThrottledPeriodsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.CPU.NrThrottled},
-				},
-				{
-					Name:        containerCPUCfsThrottledSecondsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.CPU.ThrottledUsec * 1000 / uint64(time.Second)},
-				},
-			}...)
+			metrics = append(metrics,
+				counter(containerCPUCfsPeriodsTotal, timestamp, labels, s.CPU.NrPeriods),
+				counter(containerCPUCfsThrottledPeriodsTotal, timestamp, labels, s.CPU.NrThrottled),
+				counter(containerCPUCfsThrottledSecondsTotal, timestamp, labels, s.CPU.ThrottledUsec*1000/uint64(time.Second)),
+			)
 		}
 	}
 
@@ -447,238 +315,66 @@ func (c *criService) extractMemoryMetrics(stats cgroupMetrics, labels []string, 
 
 		if s.Memory != nil {
 			if s.Memory.Usage != nil {
-				metrics = append(metrics, []*runtime.Metric{
-					{
-						Name:        containerMemoryUsageBytes.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_GAUGE,
-						LabelValues: labels,
-						Value:       &runtime.UInt64Value{Value: s.Memory.Usage.Usage},
-					},
-					{
-						Name:        containerMemoryWorkingSetBytes.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_GAUGE,
-						LabelValues: labels,
-						Value:       &runtime.UInt64Value{Value: getWorkingSet(s.Memory)},
-					},
-					{
-						Name:        containerMemoryMaxUsageBytes.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_GAUGE,
-						LabelValues: labels,
-						Value:       &runtime.UInt64Value{Value: s.Memory.Usage.Max},
-					},
-				}...)
+				metrics = append(metrics,
+					gauge(containerMemoryUsageBytes, timestamp, labels, s.Memory.Usage.Usage),
+					gauge(containerMemoryWorkingSetBytes, timestamp, labels, getWorkingSet(s.Memory)),
+					gauge(containerMemoryMaxUsageBytes, timestamp, labels, s.Memory.Usage.Max),
+				)
 			}
 
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerMemoryRss.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.TotalRSS},
-				},
-				{
-					Name:        containerMemoryCache.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.TotalCache},
-				},
-				{
-					Name:        containerMemoryMappedFile.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.TotalMappedFile},
-				},
-				{
-					Name:        containerMemoryTotalActiveFileBytes.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.TotalActiveFile},
-				},
-				{
-					Name:        containerMemoryTotalInactiveFileBytes.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.TotalInactiveFile},
-				},
-				{
-					Name:        containerMemoryFailuresTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: append(append([]string(nil), labels...), "pgfault", "container"),
-					Value:       &runtime.UInt64Value{Value: s.Memory.PgFault},
-				},
-				{
-					Name:        containerMemoryFailuresTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: append(append([]string(nil), labels...), "pgmajfault", "container"),
-					Value:       &runtime.UInt64Value{Value: s.Memory.PgMajFault},
-				},
-			}...)
+			metrics = append(metrics,
+				gauge(containerMemoryRss, timestamp, labels, s.Memory.TotalRSS),
+				gauge(containerMemoryCache, timestamp, labels, s.Memory.TotalCache),
+				gauge(containerMemoryMappedFile, timestamp, labels, s.Memory.TotalMappedFile),
+				gauge(containerMemoryTotalActiveFileBytes, timestamp, labels, s.Memory.TotalActiveFile),
+				gauge(containerMemoryTotalInactiveFileBytes, timestamp, labels, s.Memory.TotalInactiveFile),
+				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgfault", "container"), s.Memory.PgFault),
+				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgmajfault", "container"), s.Memory.PgMajFault),
+			)
 
 			if s.Memory.Kernel != nil {
-				metrics = append(metrics, &runtime.Metric{
-					Name:        containerMemoryKernelUsage.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.Kernel.Usage},
-				})
+				metrics = append(metrics, gauge(containerMemoryKernelUsage, timestamp, labels, s.Memory.Kernel.Usage))
 			}
 
 			if s.Memory.Swap != nil {
-				metrics = append(metrics, &runtime.Metric{
-					Name:        containerMemorySwap.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.Swap.Usage},
-				})
+				metrics = append(metrics, gauge(containerMemorySwap, timestamp, labels, s.Memory.Swap.Usage))
 			}
 
 			if s.Memory.Usage != nil {
-				metrics = append(metrics, &runtime.Metric{
-					Name:        containerMemoryFailcnt.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.Usage.Failcnt},
-				})
+				metrics = append(metrics, counter(containerMemoryFailcnt, timestamp, labels, s.Memory.Usage.Failcnt))
 			}
 
 		}
 
 		if s.MemoryOomControl != nil {
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerOomEventsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.MemoryOomControl.GetOomKill()},
-				},
-			}...)
+			metrics = append(metrics, counter(containerOomEventsTotal, timestamp, labels, s.MemoryOomControl.GetOomKill()))
 		}
 
 	case stats.v2 != nil:
 		s := stats.v2
 
 		if s.Memory != nil {
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerMemoryUsageBytes.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.Usage},
-				},
-				{
-					Name:        containerMemoryMaxUsageBytes.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.UsageLimit},
-				},
-				{
-					Name:        containerMemoryWorkingSetBytes.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: getWorkingSetV2(s.Memory)},
-				},
-				{
-					Name:        containerMemoryRss.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.Anon},
-				},
-				{
-					Name:        containerMemoryCache.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.File},
-				},
-				{
-					Name:        containerMemoryKernelUsage.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.KernelStack},
-				},
-				{
-					Name:        containerMemoryMappedFile.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.FileMapped},
-				},
-				{
-					Name:        containerMemorySwap.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.SwapUsage},
-				},
-				{
-					Name:        containerMemoryFailcnt.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: 0}, // cgroups v2 doesn't expose failcnt, provide 0
-				},
-				{
-					Name:        containerMemoryTotalActiveFileBytes.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.ActiveFile},
-				},
-				{
-					Name:        containerMemoryTotalInactiveFileBytes.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Memory.InactiveFile},
-				},
+			metrics = append(metrics,
+				gauge(containerMemoryUsageBytes, timestamp, labels, s.Memory.Usage),
+				gauge(containerMemoryMaxUsageBytes, timestamp, labels, s.Memory.UsageLimit),
+				gauge(containerMemoryWorkingSetBytes, timestamp, labels, getWorkingSetV2(s.Memory)),
+				gauge(containerMemoryRss, timestamp, labels, s.Memory.Anon),
+				gauge(containerMemoryCache, timestamp, labels, s.Memory.File),
+				gauge(containerMemoryKernelUsage, timestamp, labels, s.Memory.KernelStack),
+				gauge(containerMemoryMappedFile, timestamp, labels, s.Memory.FileMapped),
+				gauge(containerMemorySwap, timestamp, labels, s.Memory.SwapUsage),
+				counter(containerMemoryFailcnt, timestamp, labels, 0), // cgroups v2 doesn't expose failcnt, provide 0
+				gauge(containerMemoryTotalActiveFileBytes, timestamp, labels, s.Memory.ActiveFile),
+				gauge(containerMemoryTotalInactiveFileBytes, timestamp, labels, s.Memory.InactiveFile),
 				// TODO how to get hierarchical ?
-				{
-					Name:        containerMemoryFailuresTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: append(append([]string(nil), labels...), "pgfault", "container"),
-					Value:       &runtime.UInt64Value{Value: s.Memory.Pgfault},
-				},
-				{
-					Name:        containerMemoryFailuresTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: append(append([]string(nil), labels...), "pgmajfault", "container"),
-					Value:       &runtime.UInt64Value{Value: s.Memory.Pgmajfault},
-				},
-			}...)
+				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgfault", "container"), s.Memory.Pgfault),
+				counter(containerMemoryFailuresTotal, timestamp, append(append([]string(nil), labels...), "pgmajfault", "container"), s.Memory.Pgmajfault),
+			)
 
 		}
 
 		if s.MemoryEvents != nil {
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerOomEventsTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.MemoryEvents.GetOomKill()},
-				},
-			}...)
+			metrics = append(metrics, counter(containerOomEventsTotal, timestamp, labels, s.MemoryEvents.GetOomKill()))
 		}
 	}
 
@@ -695,34 +391,16 @@ func (c *criService) extractDiskIOMetrics(stats cgroupMetrics, labels []string, 
 		if s.Blkio != nil {
 			// Process blkio device usage stats
 			for _, entry := range s.Blkio.IoServiceBytesRecursive {
-				metrics = append(metrics, &runtime.Metric{
-					Name:        containerBlkioDeviceUsageTotal.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_COUNTER,
-					LabelValues: append(append([]string(nil), labels...), entry.Device, strconv.FormatUint(entry.Major, 10), strconv.FormatUint(entry.Minor, 10), entry.Op),
-					Value:       &runtime.UInt64Value{Value: entry.Value},
-				})
+				metrics = append(metrics, counter(containerBlkioDeviceUsageTotal, timestamp, append(append([]string(nil), labels...), entry.Device, strconv.FormatUint(entry.Major, 10), strconv.FormatUint(entry.Minor, 10), entry.Op), entry.Value))
 			}
 
 			// Process filesystem read/write stats
 			for _, entry := range s.Blkio.IoServicedRecursive {
 				switch strings.ToLower(entry.Op) {
 				case "read":
-					metrics = append(metrics, &runtime.Metric{
-						Name:        containerFsReadsTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), entry.Device),
-						Value:       &runtime.UInt64Value{Value: entry.Value},
-					})
+					metrics = append(metrics, counter(containerFsReadsTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
 				case "write":
-					metrics = append(metrics, &runtime.Metric{
-						Name:        containerFsWritesTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), entry.Device),
-						Value:       &runtime.UInt64Value{Value: entry.Value},
-					})
+					metrics = append(metrics, counter(containerFsWritesTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
 				}
 			}
 
@@ -730,21 +408,9 @@ func (c *criService) extractDiskIOMetrics(stats cgroupMetrics, labels []string, 
 			for _, entry := range s.Blkio.IoServiceBytesRecursive {
 				switch strings.ToLower(entry.Op) {
 				case "read":
-					metrics = append(metrics, &runtime.Metric{
-						Name:        containerFsReadsBytesTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), entry.Device),
-						Value:       &runtime.UInt64Value{Value: entry.Value},
-					})
+					metrics = append(metrics, counter(containerFsReadsBytesTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
 				case "write":
-					metrics = append(metrics, &runtime.Metric{
-						Name:        containerFsWritesBytesTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), entry.Device),
-						Value:       &runtime.UInt64Value{Value: entry.Value},
-					})
+					metrics = append(metrics, counter(containerFsWritesBytesTotal, timestamp, append(append([]string(nil), labels...), entry.Device), entry.Value))
 				}
 			}
 		}
@@ -756,36 +422,12 @@ func (c *criService) extractDiskIOMetrics(stats cgroupMetrics, labels []string, 
 			// Process cgroups v2 I/O stats
 			for _, entry := range s.Io.Usage {
 				device := fmt.Sprintf("%d:%d", entry.Major, entry.Minor)
-				metrics = append(metrics, []*runtime.Metric{
-					{
-						Name:        containerFsReadsBytesTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), device),
-						Value:       &runtime.UInt64Value{Value: entry.Rbytes},
-					},
-					{
-						Name:        containerFsWritesBytesTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), device),
-						Value:       &runtime.UInt64Value{Value: entry.Wbytes},
-					},
-					{
-						Name:        containerFsReadsTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), device),
-						Value:       &runtime.UInt64Value{Value: entry.Rios},
-					},
-					{
-						Name:        containerFsWritesTotal.Name,
-						Timestamp:   timestamp,
-						MetricType:  runtime.MetricType_COUNTER,
-						LabelValues: append(append([]string(nil), labels...), device),
-						Value:       &runtime.UInt64Value{Value: entry.Wios},
-					},
-				}...)
+				metrics = append(metrics,
+					counter(containerFsReadsBytesTotal, timestamp, append(append([]string(nil), labels...), device), entry.Rbytes),
+					counter(containerFsWritesBytesTotal, timestamp, append(append([]string(nil), labels...), device), entry.Wbytes),
+					counter(containerFsReadsTotal, timestamp, append(append([]string(nil), labels...), device), entry.Rios),
+					counter(containerFsWritesTotal, timestamp, append(append([]string(nil), labels...), device), entry.Wios),
+				)
 
 			}
 		}
@@ -802,58 +444,22 @@ func (c *criService) extractProcessMetrics(ctx context.Context, task containerd.
 		s := stats.v1
 
 		if s.Pids != nil {
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerProcesses.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Pids.Current},
-				},
-				{
-					Name:        containerThreadsMax.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Pids.Limit},
-				},
-				{
-					Name:        containerThreads.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Pids.Current},
-				},
-			}...)
+			metrics = append(metrics,
+				gauge(containerProcesses, timestamp, labels, s.Pids.Current),
+				gauge(containerThreadsMax, timestamp, labels, s.Pids.Limit),
+				gauge(containerThreads, timestamp, labels, s.Pids.Current),
+			)
 		}
 
 	case stats.v2 != nil:
 		s := stats.v2
 
 		if s.Pids != nil {
-			metrics = append(metrics, []*runtime.Metric{
-				{
-					Name:        containerProcesses.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Pids.Current},
-				},
-				{
-					Name:        containerThreadsMax.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Pids.Limit},
-				},
-				{
-					Name:        containerThreads.Name,
-					Timestamp:   timestamp,
-					MetricType:  runtime.MetricType_GAUGE,
-					LabelValues: labels,
-					Value:       &runtime.UInt64Value{Value: s.Pids.Current},
-				},
-			}...)
+			metrics = append(metrics,
+				gauge(containerProcesses, timestamp, labels, s.Pids.Current),
+				gauge(containerThreadsMax, timestamp, labels, s.Pids.Limit),
+				gauge(containerThreads, timestamp, labels, s.Pids.Current),
+			)
 		}
 	}
 
@@ -864,13 +470,7 @@ func (c *criService) extractProcessMetrics(ctx context.Context, task containerd.
 
 	if taskSpec != nil && taskSpec.Process != nil {
 		for _, rlimit := range taskSpec.Process.Rlimits {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerUlimitsSoft.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_GAUGE,
-				LabelValues: append(append([]string(nil), labels...), rlimit.Type),
-				Value:       &runtime.UInt64Value{Value: rlimit.Soft},
-			})
+			metrics = append(metrics, gauge(containerUlimitsSoft, timestamp, append(append([]string(nil), labels...), rlimit.Type), rlimit.Soft))
 		}
 	}
 
@@ -890,22 +490,10 @@ func (c *criService) extractProcessMetrics(ctx context.Context, task containerd.
 		return metrics, fmt.Errorf("failed to count file descriptors and sockets: %w", err)
 	}
 
-	metrics = append(metrics, []*runtime.Metric{
-		{
-			Name:        containerFileDescriptors.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: labels,
-			Value:       &runtime.UInt64Value{Value: fdCount},
-		},
-		{
-			Name:        containerSockets.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: labels,
-			Value:       &runtime.UInt64Value{Value: socketCount},
-		},
-	}...)
+	metrics = append(metrics,
+		gauge(containerFileDescriptors, timestamp, labels, fdCount),
+		gauge(containerSockets, timestamp, labels, socketCount),
+	)
 
 	return metrics, nil
 }
@@ -925,52 +513,22 @@ func (c *criService) extractContainerSpecMetrics(ctx context.Context, task conta
 	var metrics []*runtime.Metric
 	if cpuResource := resource.CPU; cpuResource != nil {
 		if cpuResource.Period != nil {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerSpecCPUPeriod.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_GAUGE,
-				LabelValues: labels,
-				Value:       &runtime.UInt64Value{Value: *cpuResource.Period},
-			})
+			metrics = append(metrics, gauge(containerSpecCPUPeriod, timestamp, labels, *cpuResource.Period))
 		}
 		if cpuResource.Shares != nil {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerSpecCPUShares.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_GAUGE,
-				LabelValues: labels,
-				Value:       &runtime.UInt64Value{Value: *cpuResource.Shares},
-			})
+			metrics = append(metrics, gauge(containerSpecCPUShares, timestamp, labels, *cpuResource.Shares))
 		}
 	}
 
 	if memoryResource := resource.Memory; memoryResource != nil {
 		if memoryResource.Limit != nil {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerSpecMemoryLimitBytes.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_GAUGE,
-				LabelValues: labels,
-				Value:       &runtime.UInt64Value{Value: uint64(*memoryResource.Limit)},
-			})
+			metrics = append(metrics, gauge(containerSpecMemoryLimitBytes, timestamp, labels, uint64(*memoryResource.Limit)))
 		}
 		if memoryResource.Reservation != nil {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerSpecMemoryReservationLimitBytes.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_GAUGE,
-				LabelValues: labels,
-				Value:       &runtime.UInt64Value{Value: uint64(*memoryResource.Reservation)},
-			})
+			metrics = append(metrics, gauge(containerSpecMemoryReservationLimitBytes, timestamp, labels, uint64(*memoryResource.Reservation)))
 		}
 		if memoryResource.Swap != nil {
-			metrics = append(metrics, &runtime.Metric{
-				Name:        containerSpecMemorySwapLimitBytes.Name,
-				Timestamp:   timestamp,
-				MetricType:  runtime.MetricType_GAUGE,
-				LabelValues: labels,
-				Value:       &runtime.UInt64Value{Value: uint64(*memoryResource.Swap)},
-			})
+			metrics = append(metrics, gauge(containerSpecMemorySwapLimitBytes, timestamp, labels, uint64(*memoryResource.Swap)))
 		}
 	}
 	return metrics, nil
@@ -1044,34 +602,10 @@ func (c *criService) extractFilesystemMetrics(ctx context.Context, container con
 	// TODO: These are wrong, but I (fionera) don't know the internals enough to correctly fetch
 	// the correct device metrics.
 	metrics := []*runtime.Metric{
-		{
-			Name:        containerFsUsageBytes.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: append(append([]string(nil), labels...), "/"),
-			Value:       &runtime.UInt64Value{Value: usedBytes},
-		},
-		{
-			Name:        containerFsLimitBytes.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: append(append([]string(nil), labels...), "/"),
-			Value:       &runtime.UInt64Value{Value: limit},
-		},
-		{
-			Name:        containerFsInodesTotal.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: append(append([]string(nil), labels...), "/"),
-			Value:       &runtime.UInt64Value{Value: inodes},
-		},
-		{
-			Name:        containerFsInodesFree.Name,
-			Timestamp:   timestamp,
-			MetricType:  runtime.MetricType_GAUGE,
-			LabelValues: append(append([]string(nil), labels...), "/"),
-			Value:       &runtime.UInt64Value{Value: inodesFree},
-		},
+		gauge(containerFsUsageBytes, timestamp, append(append([]string(nil), labels...), "/"), usedBytes),
+		gauge(containerFsLimitBytes, timestamp, append(append([]string(nil), labels...), "/"), limit),
+		gauge(containerFsInodesTotal, timestamp, append(append([]string(nil), labels...), "/"), inodes),
+		gauge(containerFsInodesFree, timestamp, append(append([]string(nil), labels...), "/"), inodesFree),
 	}
 
 	return metrics, nil
@@ -1105,4 +639,24 @@ func (c *criService) getContainerProcessDescriptorCount(ctx context.Context, pid
 	}
 
 	return fdCount, socketCount, nil
+}
+
+// gauge returns a gauge sample of desc with the given labels and value.
+func gauge(desc *runtime.MetricDescriptor, timestamp int64, labels []string, value uint64) *runtime.Metric {
+	return newUInt64Metric(desc, runtime.MetricType_GAUGE, timestamp, labels, value)
+}
+
+// counter returns a counter sample of desc with the given labels and value.
+func counter(desc *runtime.MetricDescriptor, timestamp int64, labels []string, value uint64) *runtime.Metric {
+	return newUInt64Metric(desc, runtime.MetricType_COUNTER, timestamp, labels, value)
+}
+
+func newUInt64Metric(desc *runtime.MetricDescriptor, metricType runtime.MetricType, timestamp int64, labels []string, value uint64) *runtime.Metric {
+	return &runtime.Metric{
+		Name:        desc.Name,
+		Timestamp:   timestamp,
+		MetricType:  metricType,
+		LabelValues: labels,
+		Value:       &runtime.UInt64Value{Value: value},
+	}
 }
