@@ -113,11 +113,18 @@ func (idx *TruncIndex) Delete(id string) error {
 	return nil
 }
 
-// Get retrieves an ID from the TruncIndex. If there are multiple IDs
-// with the given prefix, an error is thrown.
+// Get retrieves an ID from the TruncIndex. A stored ID matches itself.
+// Otherwise, if there are multiple IDs with the given prefix, an error is
+// thrown.
 func (idx *TruncIndex) Get(s string) (string, error) {
 	if s == "" {
 		return "", ErrEmptyPrefix
+	}
+
+	idx.RLock()
+	defer idx.RUnlock()
+	if _, ok := idx.ids[s]; ok {
+		return s, nil
 	}
 	var (
 		id string
@@ -131,9 +138,6 @@ func (idx *TruncIndex) Get(s string) (string, error) {
 		id = string(prefix)
 		return nil
 	}
-
-	idx.RLock()
-	defer idx.RUnlock()
 	if err := idx.trie.VisitSubtree(patricia.Prefix(s), subTreeVisitFunc); err != nil {
 		return "", err
 	}
