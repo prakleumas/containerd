@@ -45,10 +45,12 @@ func IsEnabled() bool {
 	return enabled
 }
 
-var (
-	initOnce sync.Once
-	initErr  error
-)
+var initRDT = sync.OnceValue(func() error {
+	if err := rdt.Initialize(ResctrlPrefix); err != nil {
+		return fmt.Errorf("RDT not enabled: %w", err)
+	}
+	return nil
+})
 
 // SetConfig updates rdt config with a given config path.
 func SetConfig(configFilePath string) error {
@@ -61,14 +63,8 @@ func SetConfig(configFilePath string) error {
 		return nil
 	}
 
-	initOnce.Do(func() {
-		err := rdt.Initialize(ResctrlPrefix)
-		if err != nil {
-			initErr = fmt.Errorf("RDT not enabled: %w", err)
-		}
-	})
-	if initErr != nil {
-		return initErr
+	if err := initRDT(); err != nil {
+		return err
 	}
 
 	if err := rdt.SetConfigFromFile(configFilePath, true); err != nil {
