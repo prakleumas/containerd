@@ -964,20 +964,7 @@ func requestFields(req *http.Request) log.Fields {
 	fields := map[string]any{
 		"request.method": req.Method,
 	}
-	for k, vals := range req.Header {
-		k = strings.ToLower(k)
-		if k == "authorization" {
-			continue
-		}
-		for i, v := range vals {
-			field := "request.header." + k
-			if i > 0 {
-				field = fmt.Sprintf("%s.%d", field, i)
-			}
-			fields[field] = v
-		}
-	}
-
+	addHeaderFields(fields, "request.header.", req.Header, "authorization")
 	return fields
 }
 
@@ -985,18 +972,26 @@ func responseFields(resp *http.Response) log.Fields {
 	fields := map[string]any{
 		"response.status": resp.Status,
 	}
-	for k, vals := range resp.Header {
+	addHeaderFields(fields, "response.header.", resp.Header, "")
+	return fields
+}
+
+// addHeaderFields adds each value of h to fields under prefix and the
+// lowercased header name, skipping the header named omit if not empty.
+func addHeaderFields(fields log.Fields, prefix string, h http.Header, omit string) {
+	for k, vals := range h {
 		k = strings.ToLower(k)
+		if omit != "" && k == omit {
+			continue
+		}
 		for i, v := range vals {
-			field := "response.header." + k
+			field := prefix + k
 			if i > 0 {
 				field = fmt.Sprintf("%s.%d", field, i)
 			}
 			fields[field] = v
 		}
 	}
-
-	return fields
 }
 
 // IsLocalhost checks if the registry host is local.

@@ -1801,3 +1801,37 @@ func TestResolveForbiddenGETFallbackNetworkError(t *testing.T) {
 		t.Errorf("expected 403 in error, got: %s", err.Error())
 	}
 }
+
+func TestRequestFieldsOmitsAuthorization(t *testing.T) {
+	req := &http.Request{
+		Method: http.MethodGet,
+		Header: http.Header{
+			"Authorization": {"Bearer secret"},
+			"authorization": {"Basic secret"},
+			"Accept":        {"a", "b"},
+		},
+	}
+	want := map[string]any{
+		"request.method":          http.MethodGet,
+		"request.header.accept":   "a",
+		"request.header.accept.1": "b",
+	}
+	assert.Equal(t, want, requestFields(req))
+}
+
+func TestResponseFields(t *testing.T) {
+	resp := &http.Response{
+		Status: "200 OK",
+		Header: http.Header{
+			"Www-Authenticate": {"Bearer realm=x"},
+			"Warning":          {"a", "b"},
+		},
+	}
+	want := map[string]any{
+		"response.status":                  "200 OK",
+		"response.header.www-authenticate": "Bearer realm=x",
+		"response.header.warning":          "a",
+		"response.header.warning.1":        "b",
+	}
+	assert.Equal(t, want, responseFields(resp))
+}
