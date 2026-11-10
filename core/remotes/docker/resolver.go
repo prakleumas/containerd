@@ -311,13 +311,9 @@ func (r *dockerResolver) Resolve(ctx context.Context, ref string) (string, ocisp
 			break
 		}
 		for i, host := range hosts {
-			req := base.request(host, http.MethodHead, u...)
-			if err := req.addNamespace(base.refspec.Hostname()); err != nil {
+			req, err := r.resolveRequest(base, host, http.MethodHead, u...)
+			if err != nil {
 				return "", ocispec.Descriptor{}, err
-			}
-
-			for key, value := range r.resolveHeader {
-				req.header[key] = append(req.header[key], value...)
 			}
 
 			ctx := log.WithLogger(ctx, log.G(ctx).WithFields(log.Fields{
@@ -365,12 +361,9 @@ func (r *dockerResolver) Resolve(ctx context.Context, ref string) (string, ocisp
 					// diagnostics.
 					if resp.StatusCode == http.StatusForbidden && req.method == http.MethodHead {
 						err = withGETErrorBody(ctx, err, resp, func() (*http.Response, error) {
-							getReq := base.request(host, http.MethodGet, u...)
-							if addErr := getReq.addNamespace(base.refspec.Hostname()); addErr != nil {
-								return nil, addErr
-							}
-							for key, value := range r.resolveHeader {
-								getReq.header[key] = append(getReq.header[key], value...)
+							getReq, err := r.resolveRequest(base, host, http.MethodGet, u...)
+							if err != nil {
+								return nil, err
 							}
 							return getReq.doWithRetries(ctx, false)
 						})
@@ -406,13 +399,9 @@ func (r *dockerResolver) Resolve(ctx context.Context, ref string) (string, ocisp
 			if dgst == "" || size == -1 {
 				log.G(ctx).Debug("no Docker-Content-Digest header, fetching manifest instead")
 
-				req = base.request(host, http.MethodGet, u...)
-				if err := req.addNamespace(base.refspec.Hostname()); err != nil {
+				req, err = r.resolveRequest(base, host, http.MethodGet, u...)
+				if err != nil {
 					return "", ocispec.Descriptor{}, err
-				}
-
-				for key, value := range r.resolveHeader {
-					req.header[key] = append(req.header[key], value...)
 				}
 
 				// Don't report warnings during resolution
@@ -542,6 +531,19 @@ type dockerBase struct {
 	ignoreDescriptorURLs bool
 	stats                *transfer.ImageResolverStats
 	warningHandler       WarningHandler
+}
+
+// resolveRequest returns a request to base on host carrying the namespace
+// query and the resolver's Accept header.
+func (r *dockerResolver) resolveRequest(base *dockerBase, host RegistryHost, method string, ps ...string) (*request, error) {
+	req := base.request(host, method, ps...)
+	if err := req.addNamespace(base.refspec.Hostname()); err != nil {
+		return nil, err
+	}
+	for key, value := range r.resolveHeader {
+		req.header[key] = append(req.header[key], value...)
+	}
+	return req, nil
 }
 
 func (r *dockerBase) Acquire(ctx context.Context, weight int64) error {
