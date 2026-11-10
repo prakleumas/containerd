@@ -71,6 +71,7 @@ import (
 	sandboxproxy "github.com/containerd/containerd/v2/core/sandbox/proxy"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	snproxy "github.com/containerd/containerd/v2/core/snapshots/proxy"
+	streamproxy "github.com/containerd/containerd/v2/core/streaming/proxy"
 	"github.com/containerd/containerd/v2/core/transfer"
 	transferproxy "github.com/containerd/containerd/v2/core/transfer/proxy"
 	"github.com/containerd/containerd/v2/defaults"
@@ -664,14 +665,19 @@ func (c *Client) Close() error {
 	return nil
 }
 
+// grpcConn returns the current gRPC connection, which Reconnect may replace.
+func (c *Client) grpcConn() *grpc.ClientConn {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	return c.conn
+}
+
 // NamespaceService returns the underlying Namespaces Store
 func (c *Client) NamespaceService() namespaces.Store {
 	if c.namespaceStore != nil {
 		return c.namespaceStore
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return NewNamespaceStoreFromClient(namespacesapi.NewNamespacesClient(c.conn))
+	return NewNamespaceStoreFromClient(namespacesapi.NewNamespacesClient(c.grpcConn()))
 }
 
 // ContainerService returns the underlying container Store
@@ -679,9 +685,7 @@ func (c *Client) ContainerService() containers.Store {
 	if c.containerStore != nil {
 		return c.containerStore
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return NewRemoteContainerStore(containersapi.NewContainersClient(c.conn))
+	return NewRemoteContainerStore(containersapi.NewContainersClient(c.grpcConn()))
 }
 
 // ContentStore returns the underlying content Store
@@ -689,9 +693,7 @@ func (c *Client) ContentStore() content.Store {
 	if c.contentStore != nil {
 		return c.contentStore
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return contentproxy.NewContentStore(c.conn)
+	return contentproxy.NewContentStore(c.grpcConn())
 }
 
 // SnapshotService returns the underlying snapshotter for the provided snapshotter name
@@ -703,9 +705,7 @@ func (c *Client) SnapshotService(snapshotterName string) snapshots.Snapshotter {
 	if c.snapshotters != nil {
 		return c.snapshotters[snapshotterName]
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return snproxy.NewSnapshotter(snapshotsapi.NewSnapshotsClient(c.conn), snapshotterName)
+	return snproxy.NewSnapshotter(snapshotsapi.NewSnapshotsClient(c.grpcConn()), snapshotterName)
 }
 
 // DefaultNamespace return the default namespace
@@ -718,9 +718,7 @@ func (c *Client) TaskService() tasks.TasksClient {
 	if c.taskService != nil {
 		return c.taskService
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return tasks.NewTasksClient(c.conn)
+	return tasks.NewTasksClient(c.grpcConn())
 }
 
 // ImageService returns the underlying image Store
@@ -728,9 +726,7 @@ func (c *Client) ImageService() images.Store {
 	if c.imageStore != nil {
 		return c.imageStore
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return NewImageStoreFromClient(imagesapi.NewImagesClient(c.conn))
+	return NewImageStoreFromClient(imagesapi.NewImagesClient(c.grpcConn()))
 }
 
 // DiffService returns the underlying Differ
@@ -738,9 +734,7 @@ func (c *Client) DiffService() DiffService {
 	if c.diffService != nil {
 		return c.diffService
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return NewDiffServiceFromClient(diffapi.NewDiffClient(c.conn))
+	return NewDiffServiceFromClient(diffapi.NewDiffClient(c.grpcConn()))
 }
 
 // IntrospectionService returns the underlying Introspection Client
@@ -748,9 +742,7 @@ func (c *Client) IntrospectionService() introspection.Service {
 	if c.introspectionService != nil {
 		return c.introspectionService
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return introspectionproxy.NewIntrospectionProxy(c.conn)
+	return introspectionproxy.NewIntrospectionProxy(c.grpcConn())
 }
 
 // LeasesService returns the underlying Leases Client
@@ -758,16 +750,12 @@ func (c *Client) LeasesService() leases.Manager {
 	if c.leasesService != nil {
 		return c.leasesService
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return leasesproxy.NewLeaseManager(leasesapi.NewLeasesClient(c.conn))
+	return leasesproxy.NewLeaseManager(leasesapi.NewLeasesClient(c.grpcConn()))
 }
 
 // HealthService returns the underlying GRPC HealthClient
 func (c *Client) HealthService() grpc_health_v1.HealthClient {
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return grpc_health_v1.NewHealthClient(c.conn)
+	return grpc_health_v1.NewHealthClient(c.grpcConn())
 }
 
 // EventService returns the underlying event service
@@ -775,9 +763,7 @@ func (c *Client) EventService() EventService {
 	if c.eventService != nil {
 		return c.eventService
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return eventsproxy.NewRemoteEvents(c.conn)
+	return eventsproxy.NewRemoteEvents(c.grpcConn())
 }
 
 // SandboxStore returns the underlying sandbox store client
@@ -785,9 +771,7 @@ func (c *Client) SandboxStore() sandbox.Store {
 	if c.sandboxStore != nil {
 		return c.sandboxStore
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return sandboxproxy.NewSandboxStore(sandboxsapi.NewStoreClient(c.conn))
+	return sandboxproxy.NewSandboxStore(sandboxsapi.NewStoreClient(c.grpcConn()))
 }
 
 // SandboxController returns the underlying sandbox controller client
@@ -795,9 +779,7 @@ func (c *Client) SandboxController(name string) sandbox.Controller {
 	if c.sandboxers != nil {
 		return c.sandboxers[name]
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return sandboxproxy.NewSandboxController(sandboxsapi.NewControllerClient(c.conn), name)
+	return sandboxproxy.NewSandboxController(sandboxsapi.NewControllerClient(c.grpcConn()), name)
 }
 
 // TranferService returns the underlying transferrer
@@ -805,9 +787,8 @@ func (c *Client) TransferService() transfer.Transferrer {
 	if c.transferService != nil {
 		return c.transferService
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return transferproxy.NewTransferrer(transferapi.NewTransferClient(c.conn), c.streamCreator())
+	conn := c.grpcConn()
+	return transferproxy.NewTransferrer(transferapi.NewTransferClient(conn), streamproxy.NewStreamCreator(conn))
 }
 
 // MountManager returns the underlying mount manager client
@@ -815,16 +796,12 @@ func (c *Client) MountManager() mount.Manager {
 	if c.mountManager != nil {
 		return c.mountManager
 	}
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return mountproxy.NewMountManager(c.conn)
+	return mountproxy.NewMountManager(c.grpcConn())
 }
 
 // VersionService returns the underlying VersionClient
 func (c *Client) VersionService() versionservice.VersionClient {
-	c.connMu.Lock()
-	defer c.connMu.Unlock()
-	return versionservice.NewVersionClient(c.conn)
+	return versionservice.NewVersionClient(c.grpcConn())
 }
 
 // Conn returns the underlying RPC connection object
