@@ -29,7 +29,6 @@ import (
 	crilabels "github.com/containerd/containerd/v2/internal/cri/labels"
 	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	containerdio "github.com/containerd/containerd/v2/pkg/cio"
-	"github.com/containerd/containerd/v2/pkg/netns"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/log"
 	"github.com/containerd/typeurl/v2"
@@ -152,7 +151,7 @@ func (c *criService) recover(ctx context.Context) error {
 		sb.Endpoint = endpoint
 
 		// Load network namespace.
-		sb.NetNS = getNetNS(&metadata)
+		sb.NetNS = podsandbox.GetNetNS(&metadata)
 
 		if err := c.sandboxStore.Add(sb); err != nil {
 			return fmt.Errorf("failed to add stored sandbox %q to store: %w", sbx.ID, err)
@@ -438,14 +437,6 @@ type podSandboxRecover interface {
 	RecoverContainer(ctx context.Context, cntr containerd.Container) (sandboxstore.Sandbox, error)
 }
 
-func getNetNS(meta *sandboxstore.Metadata) *netns.NetNS {
-	// Don't need to load netns for host network sandbox.
-	if hostNetwork(meta.Config) {
-		return nil
-	}
-	return netns.LoadNetNS(meta.NetNSPath)
-}
-
 func cleanupOrphanedIDDirs(ctx context.Context, cntrs []containerd.Container, base string) error {
 	// Cleanup orphaned id directories.
 	dirs, err := os.ReadDir(base)
@@ -466,7 +457,7 @@ func cleanupOrphanedIDDirs(ctx context.Context, cntrs []containerd.Container, ba
 			continue
 		}
 		dir := filepath.Join(base, d.Name())
-		if err := ensureRemoveAll(ctx, dir); err != nil {
+		if err := podsandbox.EnsureRemoveAll(ctx, dir); err != nil {
 			log.G(ctx).WithError(err).Warnf("Failed to remove id directory %q", dir)
 		} else {
 			log.G(ctx).Debugf("Cleanup orphaned id directory %q", dir)

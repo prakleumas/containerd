@@ -40,6 +40,7 @@ import (
 	"github.com/containerd/containerd/v2/internal/cri/config"
 	"github.com/containerd/containerd/v2/internal/cri/opts"
 	customopts "github.com/containerd/containerd/v2/internal/cri/opts"
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	"github.com/containerd/containerd/v2/internal/cri/util"
 	ctrdutil "github.com/containerd/containerd/v2/internal/cri/util"
 	"github.com/containerd/containerd/v2/pkg/cap"
@@ -148,7 +149,7 @@ func getCreateContainerTestData() (*runtime.ContainerConfig, *runtime.PodSandbox
 		assert.Equal(t, spec.Process.NoNewPrivileges, true)
 
 		t.Logf("Check cgroup path")
-		assert.Equal(t, getCgroupsPath("/test/cgroup/parent", id), spec.Linux.CgroupsPath)
+		assert.Equal(t, podsandbox.GetCgroupsPath("/test/cgroup/parent", id), spec.Linux.CgroupsPath)
 
 		t.Logf("Check namespaces")
 		assert.Contains(t, spec.Linux.Namespaces, runtimespec.LinuxNamespace{

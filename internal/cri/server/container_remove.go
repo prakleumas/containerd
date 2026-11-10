@@ -23,6 +23,7 @@ import (
 	"time"
 
 	containerd "github.com/containerd/containerd/v2/client"
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	containerstore "github.com/containerd/containerd/v2/internal/cri/store/container"
 	"github.com/containerd/containerd/v2/pkg/tracing"
 	"github.com/containerd/errdefs"
@@ -117,12 +118,12 @@ func (c *criService) RemoveContainer(ctx context.Context, r *runtime.RemoveConta
 	}
 
 	containerRootDir := c.getContainerRootDir(id)
-	if err := ensureRemoveAll(ctx, containerRootDir); err != nil {
+	if err := podsandbox.EnsureRemoveAll(ctx, containerRootDir); err != nil {
 		return nil, fmt.Errorf("failed to remove container root directory %q: %w",
 			containerRootDir, err)
 	}
 	volatileContainerRootDir := c.getVolatileContainerRootDir(id)
-	if err := ensureRemoveAll(ctx, volatileContainerRootDir); err != nil {
+	if err := podsandbox.EnsureRemoveAll(ctx, volatileContainerRootDir); err != nil {
 		return nil, fmt.Errorf("failed to remove volatile container root directory %q: %w",
 			volatileContainerRootDir, err)
 	}

@@ -102,7 +102,7 @@ func toCRISandboxInfo(ctx context.Context, sb *types.PodSandbox) (map[string]str
 		si.SnapshotKey = ctrInfo.SnapshotKey
 		si.Snapshotter = ctrInfo.Snapshotter
 
-		runtimeOptions, err := getRuntimeOptions(ctrInfo)
+		runtimeOptions, err := GetRuntimeOptions(ctrInfo)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get runtime options: %w", err)
 		}
@@ -116,7 +116,7 @@ func toCRISandboxInfo(ctx context.Context, sb *types.PodSandbox) (map[string]str
 		// status which does not exist in containerd.
 		si.Status = "deleted"
 	}
-	netns := getNetNS(&sb.Metadata)
+	netns := GetNetNS(&sb.Metadata)
 	if netns != nil {
 		// Add network closed information if sandbox is not using host network.
 		closed, err := netns.Closed()
@@ -136,8 +136,8 @@ func toCRISandboxInfo(ctx context.Context, sb *types.PodSandbox) (map[string]str
 	}, nil
 }
 
-// getRuntimeOptions get runtime options from container metadata.
-func getRuntimeOptions(c containers.Container) (any, error) {
+// GetRuntimeOptions get runtime options from container metadata.
+func GetRuntimeOptions(c containers.Container) (any, error) {
 	from := c.Runtime.Options
 	if from == nil || from.GetValue() == nil {
 		return nil, nil

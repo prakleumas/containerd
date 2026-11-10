@@ -19,22 +19,19 @@ package server
 import (
 	"context"
 	"fmt"
-	"path"
 	"path/filepath"
 	"regexp"
-	goruntime "runtime"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/containerd/typeurl/v2"
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	containerd "github.com/containerd/containerd/v2/client"
-	"github.com/containerd/containerd/v2/core/containers"
 	criconfig "github.com/containerd/containerd/v2/internal/cri/config"
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	containerstore "github.com/containerd/containerd/v2/internal/cri/store/container"
 	imagestore "github.com/containerd/containerd/v2/internal/cri/store/image"
 	"github.com/containerd/errdefs"
@@ -234,19 +231,6 @@ func filterLabel(k, v string) string {
 	return fmt.Sprintf("labels.%q==%q", k, v)
 }
 
-// getRuntimeOptions get runtime options from container metadata.
-func getRuntimeOptions(c containers.Container) (any, error) {
-	from := c.Runtime.Options
-	if from == nil || from.GetValue() == nil {
-		return nil, nil
-	}
-	opts, err := typeurl.UnmarshalAny(from)
-	if err != nil {
-		return nil, err
-	}
-	return opts, nil
-}
-
 const (
 	// unknownExitCode is the exit code when exit reason is unknown.
 	unknownExitCode = 255
@@ -425,36 +409,6 @@ func (c *criService) getContainerStatuses(ctx context.Context, podSandboxID stri
 	return containerStatuses, nil
 }
 
-// hostNetwork handles checking if host networking was requested.
-func hostNetwork(config *runtime.PodSandboxConfig) bool {
-	var hostNet bool
-	switch goruntime.GOOS {
-	case "windows":
-		// Windows HostProcess pods can only run on the host network
-		hostNet = config.GetWindows().GetSecurityContext().GetHostProcess()
-	case "darwin":
-		// No CNI on Darwin yet.
-		hostNet = true
-	default:
-		// Even on other platforms, the logic containerd uses is to check if NamespaceMode == NODE.
-		// So this handles Linux, as well as any other platforms not governed by the cases above
-		// that have special quirks.
-		hostNet = config.GetLinux().GetSecurityContext().GetNamespaceOptions().GetNetwork() == runtime.NamespaceMode_NODE
-	}
-	return hostNet
-}
-
-// getCgroupsPath generates container cgroups path.
-func getCgroupsPath(cgroupsParent, id string) string {
-	base := path.Base(cgroupsParent)
-	if strings.HasSuffix(base, ".slice") {
-		// For a.slice/b.slice/c.slice, base is c.slice.
-		// runc systemd cgroup path format is "slice:prefix:name".
-		return strings.Join([]string{base, "cri-containerd", id}, ":")
-	}
-	return filepath.Join(cgroupsParent, id)
-}
-
 func toLabel(selinuxOptions *runtime.SELinuxOption) ([]string, error) {
 	var labels []string
 
@@ -507,74 +461,6 @@ func checkSelinuxLevel(level string) error {
 	return nil
 }
 
-func parseUsernsIDMap(runtimeIDMap []*runtime.IDMapping) ([]runtimespec.LinuxIDMapping, error) {
-	var m []runtimespec.LinuxIDMapping
-
-	if len(runtimeIDMap) == 0 {
-		return m, nil
-	}
-
-	if len(runtimeIDMap) > 1 {
-		// We only accept 1 line, because containerd.WithRemappedSnapshot() only supports that.
-		return m, fmt.Errorf("only one mapping line supported, got %v mapping lines", len(runtimeIDMap))
-	}
-
-	// We know len is 1 now.
-	if runtimeIDMap[0] == nil {
-		return m, nil
-	}
-	uidMap := runtimeIDMap[0]
-
-	if uidMap.Length < 1 {
-		return m, fmt.Errorf("invalid mapping length: %v", uidMap.Length)
-	}
-
-	m = []runtimespec.LinuxIDMapping{
-		{
-			ContainerID: uidMap.ContainerId,
-			HostID:      uidMap.HostId,
-			Size:        uidMap.Length,
-		},
-	}
-
-	return m, nil
-}
-
-func parseUsernsIDs(userns *runtime.UserNamespace) (uids, gids []runtimespec.LinuxIDMapping, retErr error) {
-	if userns == nil {
-		// If userns is not set, the kubelet doesn't support this option
-		// and we should just fallback to no userns. This is completely
-		// valid.
-		return nil, nil, nil
-	}
-
-	uids, err := parseUsernsIDMap(userns.GetUids())
-	if err != nil {
-		return nil, nil, fmt.Errorf("UID mapping: %w", err)
-	}
-
-	gids, err = parseUsernsIDMap(userns.GetGids())
-	if err != nil {
-		return nil, nil, fmt.Errorf("GID mapping: %w", err)
-	}
-
-	switch mode := userns.GetMode(); mode {
-	case runtime.NamespaceMode_NODE:
-		if len(uids) != 0 || len(gids) != 0 {
-			return nil, nil, fmt.Errorf("can't use user namespace mode %q with mappings. Got %v UID mappings and %v GID mappings", mode, len(uids), len(gids))
-		}
-	case runtime.NamespaceMode_POD:
-		// This is valid, we will handle it in WithPodNamespaces().
-		if len(uids) == 0 || len(gids) == 0 {
-			return nil, nil, fmt.Errorf("can't use user namespace mode %q without UID and GID mappings", mode)
-		}
-	default:
-		return nil, nil, fmt.Errorf("unsupported user namespace mode: %q", mode)
-	}
-
-	return uids, gids, nil
-}
-
 // sameUsernsConfig checks if the userns configs are the same. If the mappings
 // on each config are the same but in different order, it returns false.
 // XXX: If the runtime.UserNamespace struct changes, we should update this
@@ -594,11 +480,11 @@ func sameUsernsConfig(a, b *runtime.UserNamespace) bool {
 		return false
 	}
 
-	aUids, aGids, err := parseUsernsIDs(a)
+	aUids, aGids, err := podsandbox.ParseUsernsIDs(a)
 	if err != nil {
 		return false
 	}
-	bUids, bGids, err := parseUsernsIDs(b)
+	bUids, bGids, err := podsandbox.ParseUsernsIDs(b)
 	if err != nil {
 		return false
 	}

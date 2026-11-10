@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/containerd/log"
+
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 )
 
 func (c *criService) portForward(ctx context.Context, id string, port int32, stream io.ReadWriter) error {
@@ -34,7 +36,7 @@ func (c *criService) portForward(ctx context.Context, id string, port int32, str
 	}
 
 	var podIP string
-	if !hostNetwork(sandbox.Config) {
+	if !podsandbox.HostNetwork(sandbox.Config) {
 		// get ip address of the sandbox
 		podIP, _, err = c.getIPs(sandbox)
 		if err != nil {

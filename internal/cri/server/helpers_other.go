@@ -19,28 +19,14 @@
 package server
 
 import (
-	"context"
 	"os"
 
-	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/unix"
 )
 
 // openLogFile opens/creates a container log file.
 func openLogFile(path string) (*os.File, error) {
 	return os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY|unix.O_NOFOLLOW, 0640)
-}
-
-// ensureRemoveAll wraps `os.RemoveAll` to check for specific errors that can
-// often be remedied.
-// Only use `ensureRemoveAll` if you really want to make every effort to remove
-// a directory.
-func ensureRemoveAll(ctx context.Context, dir string) error {
-	return os.RemoveAll(dir)
-}
-
-func modifyProcessLabel(runtimeType string, spec *specs.Spec) error {
-	return nil
 }
 
 func isUnifiedCgroupsMode() bool {

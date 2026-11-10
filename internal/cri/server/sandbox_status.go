@@ -24,6 +24,7 @@ import (
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	podsandboxtypes "github.com/containerd/containerd/v2/internal/cri/server/podsandbox/types"
 	sandboxstore "github.com/containerd/containerd/v2/internal/cri/store/sandbox"
 	"github.com/containerd/errdefs"
@@ -100,7 +101,7 @@ func (c *criService) getIPs(sandbox sandboxstore.Sandbox) (string, []string, err
 
 	// For sandboxes using the node network we are not
 	// responsible for reporting the IP.
-	if hostNetwork(config) {
+	if podsandbox.HostNetwork(config) {
 		return "", nil, nil
 	}
 

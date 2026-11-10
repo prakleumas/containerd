@@ -20,7 +20,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/containerd/typeurl/v2"
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
@@ -106,4 +108,85 @@ func getMetadata(ctx context.Context, container containerd.Container) (*sandboxs
 		return nil, errors.New("failed to convert the extension to sandbox metadata")
 	}
 	return meta, nil
+}
+
+// GetCgroupsPath generates container cgroups path.
+func GetCgroupsPath(cgroupsParent, id string) string {
+	base := path.Base(cgroupsParent)
+	if strings.HasSuffix(base, ".slice") {
+		// For a.slice/b.slice/c.slice, base is c.slice.
+		// runc systemd cgroup path format is "slice:prefix:name".
+		return strings.Join([]string{base, "cri-containerd", id}, ":")
+	}
+	return filepath.Join(cgroupsParent, id)
+}
+
+// ParseUsernsIDMap converts a CRI ID mapping list into an OCI ID mapping list.
+func ParseUsernsIDMap(runtimeIDMap []*runtime.IDMapping) ([]runtimespec.LinuxIDMapping, error) {
+	var m []runtimespec.LinuxIDMapping
+
+	if len(runtimeIDMap) == 0 {
+		return m, nil
+	}
+
+	if len(runtimeIDMap) > 1 {
+		// We only accept 1 line, because containerd.WithRemappedSnapshot() only supports that.
+		return m, fmt.Errorf("only one mapping line supported, got %v mapping lines", len(runtimeIDMap))
+	}
+
+	// We know len is 1 now.
+	if runtimeIDMap[0] == nil {
+		return m, nil
+	}
+	uidMap := runtimeIDMap[0]
+
+	if uidMap.Length < 1 {
+		return m, fmt.Errorf("invalid mapping length: %v", uidMap.Length)
+	}
+
+	m = []runtimespec.LinuxIDMapping{
+		{
+			ContainerID: uidMap.ContainerId,
+			HostID:      uidMap.HostId,
+			Size:        uidMap.Length,
+		},
+	}
+
+	return m, nil
+}
+
+// ParseUsernsIDs returns the UID and GID mappings of a CRI user namespace.
+func ParseUsernsIDs(userns *runtime.UserNamespace) (uids, gids []runtimespec.LinuxIDMapping, retErr error) {
+	if userns == nil {
+		// If userns is not set, the kubelet doesn't support this option
+		// and we should just fallback to no userns. This is completely
+		// valid.
+		return nil, nil, nil
+	}
+
+	uids, err := ParseUsernsIDMap(userns.GetUids())
+	if err != nil {
+		return nil, nil, fmt.Errorf("UID mapping: %w", err)
+	}
+
+	gids, err = ParseUsernsIDMap(userns.GetGids())
+	if err != nil {
+		return nil, nil, fmt.Errorf("GID mapping: %w", err)
+	}
+
+	switch mode := userns.GetMode(); mode {
+	case runtime.NamespaceMode_NODE:
+		if len(uids) != 0 || len(gids) != 0 {
+			return nil, nil, fmt.Errorf("can't use user namespace mode %q with mappings. Got %v UID mappings and %v GID mappings", mode, len(uids), len(gids))
+		}
+	case runtime.NamespaceMode_POD:
+		// This is valid, we will handle it in WithPodNamespaces().
+		if len(uids) == 0 || len(gids) == 0 {
+			return nil, nil, fmt.Errorf("can't use user namespace mode %q without UID and GID mappings", mode)
+		}
+	default:
+		return nil, nil, fmt.Errorf("unsupported user namespace mode: %q", mode)
+	}
+
+	return uids, gids, nil
 }

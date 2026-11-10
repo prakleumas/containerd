@@ -219,7 +219,7 @@ func (c *criService) RunPodSandbox(ctx context.Context, r *runtime.RunPodSandbox
 	}
 
 	// Setup the network namespace if host networking wasn't requested.
-	if !hostNetwork(config) {
+	if !podsandbox.HostNetwork(config) {
 		span.AddEvent("setup pod network")
 		netStart := time.Now()
 		// If it is not in host network namespace then create a namespace and set the sandbox

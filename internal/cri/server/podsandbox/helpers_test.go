@@ -19,12 +19,17 @@ package podsandbox
 import (
 	"context"
 	"os"
+	goruntime "runtime"
 	"testing"
 
+	"github.com/containerd/containerd/v2/core/containers"
 	"github.com/containerd/containerd/v2/pkg/oci"
+	"github.com/containerd/containerd/v2/pkg/protobuf/types"
+	"github.com/containerd/typeurl/v2"
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
 func TestEnvDeduplication(t *testing.T) {
@@ -108,14 +113,14 @@ func TestEnvDeduplication(t *testing.T) {
 
 func TestEnsureRemoveAllNotExist(t *testing.T) {
 	// should never return an error for a non-existent path
-	if err := ensureRemoveAll(context.Background(), "/non/existent/path"); err != nil {
+	if err := EnsureRemoveAll(context.Background(), "/non/existent/path"); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestEnsureRemoveAllWithDir(t *testing.T) {
 	dir := t.TempDir()
-	if err := ensureRemoveAll(context.Background(), dir); err != nil {
+	if err := EnsureRemoveAll(context.Background(), dir); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -125,6 +130,63 @@ func TestEnsureRemoveAllWithFile(t *testing.T) {
 	require.NoError(t, err)
 	tmp.Close()
 
-	err = ensureRemoveAll(context.Background(), tmp.Name())
+	err = EnsureRemoveAll(context.Background(), tmp.Name())
 	require.NoError(t, err)
+}
+
+func TestGetRuntimeOptions(t *testing.T) {
+	_, err := GetRuntimeOptions(containers.Container{})
+	require.NoError(t, err)
+
+	var pbany *types.Any               // This is nil.
+	var typeurlAny typeurl.Any = pbany // This is typed nil.
+	_, err = GetRuntimeOptions(containers.Container{Runtime: containers.RuntimeInfo{Options: typeurlAny}})
+	require.NoError(t, err)
+}
+
+func TestHostNetwork(t *testing.T) {
+	tests := []struct {
+		name     string
+		c        *runtime.PodSandboxConfig
+		expected bool
+	}{
+		{
+			name: "when pod namespace return false",
+			c: &runtime.PodSandboxConfig{
+				Linux: &runtime.LinuxPodSandboxConfig{
+					SecurityContext: &runtime.LinuxSandboxSecurityContext{
+						NamespaceOptions: &runtime.NamespaceOption{
+							Network: runtime.NamespaceMode_POD,
+						},
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "when node namespace return true",
+			c: &runtime.PodSandboxConfig{
+				Linux: &runtime.LinuxPodSandboxConfig{
+					SecurityContext: &runtime.LinuxSandboxSecurityContext{
+						NamespaceOptions: &runtime.NamespaceOption{
+							Network: runtime.NamespaceMode_NODE,
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		if goruntime.GOOS != "linux" {
+			t.Skip()
+		}
+
+		t.Run(tt.name, func(t *testing.T) {
+			if HostNetwork(tt.c) != tt.expected {
+				t.Errorf("failed HostNetwork got %t expected %t", HostNetwork(tt.c), tt.expected)
+			}
+		})
+	}
 }

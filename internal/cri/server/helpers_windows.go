@@ -17,12 +17,9 @@
 package server
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"syscall"
-
-	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // openLogFile opens/creates a container log file.
@@ -159,15 +156,6 @@ func fixLongPath(path string) string {
 		w++
 	}
 	return string(pathbuf[:w])
-}
-
-// ensureRemoveAll is a wrapper for os.RemoveAll on Windows.
-func ensureRemoveAll(_ context.Context, dir string) error {
-	return os.RemoveAll(dir)
-}
-
-func modifyProcessLabel(runtimeType string, spec *specs.Spec) error {
-	return nil
 }
 
 func isUnifiedCgroupsMode() bool {

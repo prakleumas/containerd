@@ -173,7 +173,7 @@ func (c *Controller) RecoverContainer(ctx context.Context, cntr containerd.Conta
 	sandbox.Sandboxer = string(config.ModePodSandbox)
 
 	// Load network namespace.
-	sandbox.NetNS = getNetNS(meta)
+	sandbox.NetNS = GetNetNS(meta)
 
 	// It doesn't matter whether task is running or not. If it is running, sandbox
 	// status will be `READY`; if it is not running, sandbox status will be `NOT_READY`,
@@ -181,17 +181,18 @@ func (c *Controller) RecoverContainer(ctx context.Context, cntr containerd.Conta
 	return sandbox, nil
 }
 
-func getNetNS(meta *sandboxstore.Metadata) *netns.NetNS {
+// GetNetNS returns the network namespace of the sandbox, or nil for a host
+// network sandbox.
+func GetNetNS(meta *sandboxstore.Metadata) *netns.NetNS {
 	// Don't need to load netns for host network sandbox.
-	if hostNetwork(meta.Config) {
+	if HostNetwork(meta.Config) {
 		return nil
 	}
 	return netns.LoadNetNS(meta.NetNSPath)
 }
 
-// hostNetwork handles checking if host networking was requested.
-// TODO: Copy pasted from sbserver to handle container sandbox events in podsandbox/ package, needs refactoring.
-func hostNetwork(config *runtime.PodSandboxConfig) bool {
+// HostNetwork handles checking if host networking was requested.
+func HostNetwork(config *runtime.PodSandboxConfig) bool {
 	var hostNet bool
 	switch goruntime.GOOS {
 	case "windows":

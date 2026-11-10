@@ -38,11 +38,11 @@ func (c *Controller) Shutdown(ctx context.Context, sandboxID string) error {
 
 	// Cleanup the sandbox root directories.
 	sandboxRootDir := c.getSandboxRootDir(sandboxID)
-	if err := ensureRemoveAll(ctx, sandboxRootDir); err != nil {
+	if err := EnsureRemoveAll(ctx, sandboxRootDir); err != nil {
 		return fmt.Errorf("failed to remove sandbox root directory %q: %w", sandboxRootDir, err)
 	}
 	volatileSandboxRootDir := c.getVolatileSandboxRootDir(sandboxID)
-	if err := ensureRemoveAll(ctx, volatileSandboxRootDir); err != nil {
+	if err := EnsureRemoveAll(ctx, volatileSandboxRootDir); err != nil {
 		return fmt.Errorf("failed to remove volatile sandbox root directory %q: %w",
 			volatileSandboxRootDir, err)
 	}

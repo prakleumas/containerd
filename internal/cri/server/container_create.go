@@ -41,6 +41,7 @@ import (
 	cio "github.com/containerd/containerd/v2/internal/cri/io"
 	crilabels "github.com/containerd/containerd/v2/internal/cri/labels"
 	customopts "github.com/containerd/containerd/v2/internal/cri/opts"
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	containerstore "github.com/containerd/containerd/v2/internal/cri/store/container"
 	sandboxstore "github.com/containerd/containerd/v2/internal/cri/store/sandbox"
 	"github.com/containerd/containerd/v2/internal/cri/util"
@@ -298,7 +299,7 @@ func (c *criService) createContainer(r *createContainerRequest) (_ string, retEr
 	r.meta.ProcessLabel = spec.Process.SelinuxLabel
 
 	// handle any KVM based runtime
-	if err := modifyProcessLabel(ociRuntime.Type, spec); err != nil {
+	if err := podsandbox.ModifyProcessLabel(ociRuntime.Type, spec); err != nil {
 		return "", err
 	}
 
@@ -852,7 +853,7 @@ func (c *criService) buildLinuxSpec(
 
 	specOpts = append(specOpts, customopts.WithResources(config.GetLinux().GetResources(), c.config.TolerateMissingHugetlbController, c.config.DisableHugetlbController))
 	if sandboxConfig.GetLinux().GetCgroupParent() != "" {
-		cgroupsPath := getCgroupsPath(sandboxConfig.GetLinux().GetCgroupParent(), id)
+		cgroupsPath := podsandbox.GetCgroupsPath(sandboxConfig.GetLinux().GetCgroupParent(), id)
 		specOpts = append(specOpts, oci.WithCgroup(cgroupsPath))
 	}
 
@@ -905,7 +906,7 @@ func (c *criService) buildLinuxSpec(
 		targetPid = status.Pid
 	}
 
-	uids, gids, err := parseUsernsIDs(nsOpts.GetUsernsOptions())
+	uids, gids, err := podsandbox.ParseUsernsIDs(nsOpts.GetUsernsOptions())
 	if err != nil {
 		return nil, fmt.Errorf("user namespace configuration: %w", err)
 	}

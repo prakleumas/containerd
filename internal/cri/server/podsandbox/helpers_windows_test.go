@@ -14,7 +14,7 @@
    limitations under the License.
 */
 
-package server
+package podsandbox
 
 import (
 	"testing"
@@ -63,8 +63,8 @@ func TestWindowsHostNetwork(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if hostNetwork(tt.c) != tt.expected {
-				t.Errorf("failed hostNetwork got %t expected %t", hostNetwork(tt.c), tt.expected)
+			if HostNetwork(tt.c) != tt.expected {
+				t.Errorf("failed HostNetwork got %t expected %t", HostNetwork(tt.c), tt.expected)
 			}
 		})
 	}

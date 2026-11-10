@@ -17,22 +17,15 @@
 package server
 
 import (
-	"context"
-	"os"
-	goruntime "runtime"
 	"testing"
 	"time"
 
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	runcoptions "github.com/containerd/containerd/api/types/runc/options"
-	"github.com/containerd/containerd/v2/core/containers"
 	criconfig "github.com/containerd/containerd/v2/internal/cri/config"
 	containerstore "github.com/containerd/containerd/v2/internal/cri/store/container"
-	"github.com/containerd/containerd/v2/pkg/oci"
-	"github.com/containerd/containerd/v2/pkg/protobuf/types"
 	"github.com/containerd/containerd/v2/plugins"
-	"github.com/containerd/typeurl/v2"
 
 	runtimespec "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pelletier/go-toml/v2"
@@ -155,108 +148,6 @@ systemd_cgroup = true
 	}
 }
 
-func TestEnvDeduplication(t *testing.T) {
-	for _, test := range []struct {
-		desc     string
-		existing []string
-		kv       [][2]string
-		expected []string
-	}{
-		{
-			desc: "single env",
-			kv: [][2]string{
-				{"a", "b"},
-			},
-			expected: []string{"a=b"},
-		},
-		{
-			desc: "multiple envs",
-			kv: [][2]string{
-				{"a", "b"},
-				{"c", "d"},
-				{"e", "f"},
-			},
-			expected: []string{
-				"a=b",
-				"c=d",
-				"e=f",
-			},
-		},
-		{
-			desc: "env override",
-			kv: [][2]string{
-				{"k1", "v1"},
-				{"k2", "v2"},
-				{"k3", "v3"},
-				{"k3", "v4"},
-				{"k1", "v5"},
-				{"k4", "v6"},
-			},
-			expected: []string{
-				"k1=v5",
-				"k2=v2",
-				"k3=v4",
-				"k4=v6",
-			},
-		},
-		{
-			desc: "existing env",
-			existing: []string{
-				"k1=v1",
-				"k2=v2",
-				"k3=v3",
-			},
-			kv: [][2]string{
-				{"k3", "v4"},
-				{"k2", "v5"},
-				{"k4", "v6"},
-			},
-			expected: []string{
-				"k1=v1",
-				"k2=v5",
-				"k3=v4",
-				"k4=v6",
-			},
-		},
-	} {
-		t.Run(test.desc, func(t *testing.T) {
-			var spec runtimespec.Spec
-			if len(test.existing) > 0 {
-				spec.Process = &runtimespec.Process{
-					Env: test.existing,
-				}
-			}
-			for _, kv := range test.kv {
-				oci.WithEnv([]string{kv[0] + "=" + kv[1]})(context.Background(), nil, nil, &spec)
-			}
-			assert.Equal(t, test.expected, spec.Process.Env)
-		})
-	}
-}
-
-func TestEnsureRemoveAllNotExist(t *testing.T) {
-	// should never return an error for a non-existent path
-	if err := ensureRemoveAll(context.Background(), "/non/existent/path"); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestEnsureRemoveAllWithDir(t *testing.T) {
-	dir := t.TempDir()
-	if err := ensureRemoveAll(context.Background(), dir); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestEnsureRemoveAllWithFile(t *testing.T) {
-	tmp, err := os.CreateTemp(t.TempDir(), "test-ensure-removeall-with-dir")
-	require.NoError(t, err)
-	tmp.Close()
-
-	err = ensureRemoveAll(context.Background(), tmp.Name())
-	require.NoError(t, err)
-}
-
 // Helper function for setting up an environment to test PID namespace targeting.
 func addContainer(c *criService, containerID, sandboxID string, PID uint32, createdAt, startedAt, finishedAt int64) error {
 	meta := containerstore.Metadata{
@@ -353,16 +244,6 @@ func TestValidateTargetContainer(t *testing.T) {
 
 }
 
-func TestGetRuntimeOptions(t *testing.T) {
-	_, err := getRuntimeOptions(containers.Container{})
-	require.NoError(t, err)
-
-	var pbany *types.Any               // This is nil.
-	var typeurlAny typeurl.Any = pbany // This is typed nil.
-	_, err = getRuntimeOptions(containers.Container{Runtime: containers.RuntimeInfo{Options: typeurlAny}})
-	require.NoError(t, err)
-}
-
 func TestCopyResourcesToStatusWindowsAffinity(t *testing.T) {
 	spec := &runtimespec.Spec{
 		Windows: &runtimespec.Windows{
@@ -383,51 +264,4 @@ func TestCopyResourcesToStatusWindowsAffinity(t *testing.T) {
 		{CpuMask: 0x3, CpuGroup: 0},
 		{CpuMask: 0xf, CpuGroup: 1},
 	}, status.Resources.Windows.AffinityCpus)
-}
-
-func TestHostNetwork(t *testing.T) {
-	tests := []struct {
-		name     string
-		c        *runtime.PodSandboxConfig
-		expected bool
-	}{
-		{
-			name: "when pod namespace return false",
-			c: &runtime.PodSandboxConfig{
-				Linux: &runtime.LinuxPodSandboxConfig{
-					SecurityContext: &runtime.LinuxSandboxSecurityContext{
-						NamespaceOptions: &runtime.NamespaceOption{
-							Network: runtime.NamespaceMode_POD,
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "when node namespace return true",
-			c: &runtime.PodSandboxConfig{
-				Linux: &runtime.LinuxPodSandboxConfig{
-					SecurityContext: &runtime.LinuxSandboxSecurityContext{
-						NamespaceOptions: &runtime.NamespaceOption{
-							Network: runtime.NamespaceMode_NODE,
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		if goruntime.GOOS != "linux" {
-			t.Skip()
-		}
-
-		t.Run(tt.name, func(t *testing.T) {
-			if hostNetwork(tt.c) != tt.expected {
-				t.Errorf("failed hostNetwork got %t expected %t", hostNetwork(tt.c), tt.expected)
-			}
-		})
-	}
 }

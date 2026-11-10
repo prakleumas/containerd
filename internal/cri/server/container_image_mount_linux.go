@@ -28,6 +28,7 @@ import (
 	containerd "github.com/containerd/containerd/v2/client"
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	kernel "github.com/containerd/containerd/v2/pkg/kernelversion"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
@@ -88,12 +89,12 @@ func ensureImageVolumeMounted(target string) (bool, error) {
 // from the mount's UID/GID mappings. This ensures that image volumes work correctly
 // with user namespaces by applying idmap to the overlay lower layers.
 func (c *criService) getImageVolumeSnapshotOpts(ctx context.Context, mount *runtime.Mount) ([]snapshots.Opt, error) {
-	uids, err := parseUsernsIDMap(mount.GetUidMappings())
+	uids, err := podsandbox.ParseUsernsIDMap(mount.GetUidMappings())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse UID mappings: %w", err)
 	}
 
-	gids, err := parseUsernsIDMap(mount.GetGidMappings())
+	gids, err := podsandbox.ParseUsernsIDMap(mount.GetGidMappings())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse GID mappings: %w", err)
 	}

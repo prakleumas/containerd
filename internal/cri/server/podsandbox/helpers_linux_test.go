@@ -61,7 +61,7 @@ func TestGetCgroupsPath(t *testing.T) {
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
-			got := getCgroupsPath(test.cgroupsParent, testID)
+			got := GetCgroupsPath(test.cgroupsParent, testID)
 			assert.Equal(t, test.expected, got)
 		})
 	}
@@ -87,7 +87,7 @@ func TestEnsureRemoveAllWithMount(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		err = ensureRemoveAll(context.Background(), dir1)
+		err = EnsureRemoveAll(context.Background(), dir1)
 		close(done)
 	}()
 

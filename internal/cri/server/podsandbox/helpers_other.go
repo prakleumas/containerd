@@ -25,14 +25,15 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-// ensureRemoveAll wraps `os.RemoveAll` to check for specific errors that can
+// EnsureRemoveAll wraps `os.RemoveAll` to check for specific errors that can
 // often be remedied.
-// Only use `ensureRemoveAll` if you really want to make every effort to remove
+// Only use `EnsureRemoveAll` if you really want to make every effort to remove
 // a directory.
-func ensureRemoveAll(ctx context.Context, dir string) error {
+func EnsureRemoveAll(ctx context.Context, dir string) error {
 	return os.RemoveAll(dir)
 }
 
-func modifyProcessLabel(runtimeType string, spec *specs.Spec) error {
+// ModifyProcessLabel does nothing on this platform.
+func ModifyProcessLabel(runtimeType string, spec *specs.Spec) error {
 	return nil
 }

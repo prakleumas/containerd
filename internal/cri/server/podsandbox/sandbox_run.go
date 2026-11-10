@@ -126,7 +126,7 @@ func (c *Controller) Start(ctx context.Context, id string) (cin sandbox.Controll
 			deferCtx, deferCancel := ctrdutil.DeferContext()
 			defer deferCancel()
 			// Cleanup the volatile sandbox root directory.
-			if cleanupErr = ensureRemoveAll(deferCtx, volatileSandboxRootDir); cleanupErr != nil {
+			if cleanupErr = EnsureRemoveAll(deferCtx, volatileSandboxRootDir); cleanupErr != nil {
 				log.G(ctx).WithError(cleanupErr).Errorf("Failed to remove volatile sandbox root directory %q",
 					volatileSandboxRootDir)
 			}
@@ -151,7 +151,7 @@ func (c *Controller) Start(ctx context.Context, id string) (cin sandbox.Controll
 	}
 
 	// handle any KVM based runtime
-	if err := modifyProcessLabel(ociRuntime.Type, spec); err != nil {
+	if err := ModifyProcessLabel(ociRuntime.Type, spec); err != nil {
 		return cin, err
 	}
 

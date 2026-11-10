@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	containerstore "github.com/containerd/containerd/v2/internal/cri/store/container"
 	"github.com/containerd/containerd/v2/internal/cri/util"
 	"github.com/containerd/errdefs"
@@ -204,7 +205,7 @@ func toCRIContainerInfo(ctx context.Context, container containerstore.Container,
 	ci.SnapshotKey = ctrInfo.SnapshotKey
 	ci.Snapshotter = ctrInfo.Snapshotter
 
-	runtimeOptions, err := getRuntimeOptions(ctrInfo)
+	runtimeOptions, err := podsandbox.GetRuntimeOptions(ctrInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get runtime options: %w", err)
 	}

@@ -25,6 +25,8 @@ import (
 
 	"github.com/containerd/log"
 	"github.com/containernetworking/plugins/pkg/ns"
+
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 )
 
 // portForward uses netns to enter the sandbox namespace, and forwards a stream inside the
@@ -40,7 +42,7 @@ func (c *criService) portForward(ctx context.Context, id string, port int32, str
 		// netNSPath is the network namespace path for logging.
 		netNSPath string
 	)
-	if !hostNetwork(s.Config) {
+	if !podsandbox.HostNetwork(s.Config) {
 		if closed, err := s.NetNS.Closed(); err != nil {
 			return fmt.Errorf("failed to check netwok namespace closed for sandbox %q: %w", id, err)
 		} else if closed {

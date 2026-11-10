@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -55,17 +54,6 @@ const (
 	// resolvConfPath is the abs path of resolv.conf on host or container.
 	resolvConfPath = "/etc/resolv.conf"
 )
-
-// getCgroupsPath generates container cgroups path.
-func getCgroupsPath(cgroupsParent, id string) string {
-	base := path.Base(cgroupsParent)
-	if strings.HasSuffix(base, ".slice") {
-		// For a.slice/b.slice/c.slice, base is c.slice.
-		// runc systemd cgroup path format is "slice:prefix:name".
-		return strings.Join([]string{base, "cri-containerd", id}, ":")
-	}
-	return filepath.Join(cgroupsParent, id)
-}
 
 // getSandboxHostname returns the hostname file path inside the sandbox root directory.
 func (c *Controller) getSandboxHostname(id string) string {
@@ -165,9 +153,9 @@ func unmountRecursive(ctx context.Context, target string) error {
 	return nil
 }
 
-// ensureRemoveAll wraps `os.RemoveAll` to check for specific errors that can
+// EnsureRemoveAll wraps `os.RemoveAll` to check for specific errors that can
 // often be remedied.
-// Only use `ensureRemoveAll` if you really want to make every effort to remove
+// Only use `EnsureRemoveAll` if you really want to make every effort to remove
 // a directory.
 //
 // Because of the way `os.Remove` (and by extension `os.RemoveAll`) works, there
@@ -177,7 +165,7 @@ func unmountRecursive(ctx context.Context, target string) error {
 // be gone we can just retry the remove operation.
 //
 // This should not return a `os.ErrNotExist` kind of error under any circumstances
-func ensureRemoveAll(ctx context.Context, dir string) error {
+func EnsureRemoveAll(ctx context.Context, dir string) error {
 	notExistErr := make(map[string]bool)
 
 	// track retries
@@ -245,7 +233,9 @@ func isVMBasedRuntime(runtimeType string) bool {
 	return false
 }
 
-func modifyProcessLabel(runtimeType string, spec *runtimespec.Spec) error {
+// ModifyProcessLabel sets the KVM SELinux process label on spec when the
+// runtime is VM based and SELinux is enabled.
+func ModifyProcessLabel(runtimeType string, spec *runtimespec.Spec) error {
 	if !selinux.GetEnabled() || !isVMBasedRuntime(runtimeType) {
 		return nil
 	}
@@ -257,82 +247,16 @@ func modifyProcessLabel(runtimeType string, spec *runtimespec.Spec) error {
 	return nil
 }
 
-func parseUsernsIDMap(runtimeIDMap []*runtime.IDMapping) ([]runtimespec.LinuxIDMapping, error) {
-	var m []runtimespec.LinuxIDMapping
-
-	if len(runtimeIDMap) == 0 {
-		return m, nil
-	}
-
-	if len(runtimeIDMap) > 1 {
-		// We only accept 1 line, because containerd.WithRemappedSnapshot() only supports that.
-		return m, fmt.Errorf("only one mapping line supported, got %v mapping lines", len(runtimeIDMap))
-	}
-
-	// We know len is 1 now.
-	if runtimeIDMap[0] == nil {
-		return m, nil
-	}
-	uidMap := runtimeIDMap[0]
-
-	if uidMap.Length < 1 {
-		return m, fmt.Errorf("invalid mapping length: %v", uidMap.Length)
-	}
-
-	m = []runtimespec.LinuxIDMapping{
-		{
-			ContainerID: uidMap.ContainerId,
-			HostID:      uidMap.HostId,
-			Size:        uidMap.Length,
-		},
-	}
-
-	return m, nil
-}
-
-func parseUsernsIDs(userns *runtime.UserNamespace) (uids, gids []runtimespec.LinuxIDMapping, retErr error) {
-	if userns == nil {
-		// If userns is not set, the kubelet doesn't support this option
-		// and we should just fallback to no userns. This is completely
-		// valid.
-		return nil, nil, nil
-	}
-
-	uids, err := parseUsernsIDMap(userns.GetUids())
-	if err != nil {
-		return nil, nil, fmt.Errorf("UID mapping: %w", err)
-	}
-
-	gids, err = parseUsernsIDMap(userns.GetGids())
-	if err != nil {
-		return nil, nil, fmt.Errorf("GID mapping: %w", err)
-	}
-
-	switch mode := userns.GetMode(); mode {
-	case runtime.NamespaceMode_NODE:
-		if len(uids) != 0 || len(gids) != 0 {
-			return nil, nil, fmt.Errorf("can't use user namespace mode %q with mappings. Got %v UID mappings and %v GID mappings", mode, len(uids), len(gids))
-		}
-	case runtime.NamespaceMode_POD:
-		// This is valid, we will handle it in WithPodNamespaces().
-		if len(uids) == 0 || len(gids) == 0 {
-			return nil, nil, fmt.Errorf("can't use user namespace mode %q without UID and GID mappings", mode)
-		}
-	default:
-		return nil, nil, fmt.Errorf("unsupported user namespace mode: %q", mode)
-	}
-
-	return uids, gids, nil
-}
-
-func snapshotterRemapOpts(nsOpts *runtime.NamespaceOption) ([]snapshots.Opt, error) {
+// SnapshotterRemapOpts returns the snapshotter options that remap the
+// snapshot to the pod user namespace.
+func SnapshotterRemapOpts(nsOpts *runtime.NamespaceOption) ([]snapshots.Opt, error) {
 	snapshotOpt := []snapshots.Opt{}
 	usernsOpts := nsOpts.GetUsernsOptions()
 	if usernsOpts == nil {
 		return snapshotOpt, nil
 	}
 
-	uids, gids, err := parseUsernsIDs(usernsOpts)
+	uids, gids, err := ParseUsernsIDs(usernsOpts)
 	if err != nil {
 		return nil, fmt.Errorf("user namespace configuration: %w", err)
 	}

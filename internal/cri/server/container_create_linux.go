@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/v2/pkg/oci"
 
 	customopts "github.com/containerd/containerd/v2/internal/cri/opts"
+	"github.com/containerd/containerd/v2/internal/cri/server/podsandbox"
 	"github.com/containerd/containerd/v2/internal/cri/sputil"
 )
 
@@ -108,5 +109,5 @@ func (c *criService) containerSpecOpts(config *runtime.ContainerConfig, imageCon
 // snapshotterOpts returns any Linux specific snapshotter options for the rootfs snapshot
 func snapshotterOpts(config *runtime.ContainerConfig) ([]snapshots.Opt, error) {
 	nsOpts := config.GetLinux().GetSecurityContext().GetNamespaceOptions()
-	return snapshotterRemapOpts(nsOpts)
+	return podsandbox.SnapshotterRemapOpts(nsOpts)
 }

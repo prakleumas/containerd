@@ -62,7 +62,7 @@ func (c *Controller) sandboxContainerSpec(id string, config *runtime.PodSandboxC
 
 	// Set cgroups parent.
 	if config.GetLinux().GetCgroupParent() != "" {
-		cgroupsPath := getCgroupsPath(config.GetLinux().GetCgroupParent(), id)
+		cgroupsPath := GetCgroupsPath(config.GetLinux().GetCgroupParent(), id)
 		specOpts = append(specOpts, oci.WithCgroup(cgroupsPath))
 	}
 
@@ -93,7 +93,7 @@ func (c *Controller) sandboxContainerSpec(id string, config *runtime.PodSandboxC
 	}
 
 	usernsOpts := nsOptions.GetUsernsOptions()
-	uids, gids, err := parseUsernsIDs(usernsOpts)
+	uids, gids, err := ParseUsernsIDs(usernsOpts)
 	var usernsEnabled bool
 	if err != nil {
 		return nil, fmt.Errorf("user namespace configuration: %w", err)
@@ -106,7 +106,7 @@ func (c *Controller) sandboxContainerSpec(id string, config *runtime.PodSandboxC
 		case runtime.NamespaceMode_POD:
 			specOpts = append(specOpts, oci.WithUserNamespace(uids, gids))
 			usernsEnabled = true
-			if !hostNetwork(config) {
+			if !HostNetwork(config) {
 				if err := c.pinUserNamespace(id, nsPath); err != nil {
 					return nil, fmt.Errorf("failed to pin user namespace: %w", err)
 				}
@@ -363,5 +363,5 @@ func (c *Controller) cleanupSandboxFiles(id string, config *runtime.PodSandboxCo
 // for a sandbox container.
 func sandboxSnapshotterOpts(config *runtime.PodSandboxConfig) ([]snapshots.Opt, error) {
 	nsOpts := config.GetLinux().GetSecurityContext().GetNamespaceOptions()
-	return snapshotterRemapOpts(nsOpts)
+	return SnapshotterRemapOpts(nsOpts)
 }
