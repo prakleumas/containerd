@@ -114,7 +114,7 @@ func (m *PoolMetadata) AddDevice(ctx context.Context, info *DeviceInfo) error {
 
 		info.DeviceID = deviceID
 
-		return putObject(devicesBucket, info.Name, info, true)
+		return putObject(devicesBucket, info.Name, info)
 	})
 
 	if err != nil {
@@ -149,7 +149,7 @@ func (m *PoolMetadata) MarkFaulty(ctx context.Context, name string) error {
 
 		device.State = Faulty
 
-		if err := putObject(devBucket, name, &device, true); err != nil {
+		if err := putObject(devBucket, name, &device); err != nil {
 			return err
 		}
 
@@ -251,7 +251,7 @@ func (m *PoolMetadata) UpdateDevice(ctx context.Context, name string, fn DeviceI
 			return fmt.Errorf("failed to update device info, device id didn't match: %d %d", devID, device.DeviceID)
 		}
 
-		return putObject(bucket, name, device, true)
+		return putObject(bucket, name, device)
 	})
 }
 
@@ -337,12 +337,8 @@ func (m *PoolMetadata) Close() error {
 	return nil
 }
 
-func putObject(bucket *bolt.Bucket, key string, obj any, overwrite bool) error {
+func putObject(bucket *bolt.Bucket, key string, obj any) error {
 	keyBytes := []byte(key)
-
-	if !overwrite && bucket.Get(keyBytes) != nil {
-		return fmt.Errorf("object with key %q already exists", key)
-	}
 
 	data, err := json.Marshal(obj)
 	if err != nil {
@@ -362,10 +358,8 @@ func getObject(bucket *bolt.Bucket, key string, obj any) error {
 		return ErrNotFound
 	}
 
-	if obj != nil {
-		if err := json.Unmarshal(data, obj); err != nil {
-			return fmt.Errorf("failed to unmarshal object with key %q: %w", key, err)
-		}
+	if err := json.Unmarshal(data, obj); err != nil {
+		return fmt.Errorf("failed to unmarshal object with key %q: %w", key, err)
 	}
 
 	return nil
