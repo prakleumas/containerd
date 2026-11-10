@@ -17,8 +17,9 @@
 package auth
 
 import (
+	"cmp"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -43,14 +44,6 @@ type Challenge struct {
 	// parameters are the auth-params according to RFC 2617
 	Parameters map[string]string
 }
-
-type byScheme []Challenge
-
-func (bs byScheme) Len() int      { return len(bs) }
-func (bs byScheme) Swap(i, j int) { bs[i], bs[j] = bs[j], bs[i] }
-
-// Less sorts in priority order: token > digest > basic
-func (bs byScheme) Less(i, j int) bool { return bs[i].Scheme > bs[j].Scheme }
 
 // Octet types from RFC 2616.
 type octetType byte
@@ -112,7 +105,10 @@ func ParseAuthHeader(header http.Header) []Challenge {
 		}
 		challenges = append(challenges, Challenge{Scheme: s, Parameters: p})
 	}
-	sort.Stable(byScheme(challenges))
+	// Sort in priority order: token > digest > basic
+	slices.SortStableFunc(challenges, func(a, b Challenge) int {
+		return cmp.Compare(b.Scheme, a.Scheme)
+	})
 	return challenges
 }
 
