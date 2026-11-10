@@ -133,49 +133,31 @@ func createIO(ctx context.Context, id string, ioUID, ioGID int, stdio stdio.Stdi
 
 func copyPipes(ctx context.Context, rio runc.IO, stdin, stdout, stderr string, wg, cwg *sync.WaitGroup) error {
 	var sameFile *countingWriteCloser
+	copyFrom := func(stream string, src func() io.ReadCloser) func(wc io.WriteCloser, rc io.Closer) {
+		return func(wc io.WriteCloser, rc io.Closer) {
+			wg.Add(1)
+			cwg.Add(1)
+			go func() {
+				cwg.Done()
+				p := bufPool.Get().(*[]byte)
+				defer bufPool.Put(p)
+				if _, err := io.CopyBuffer(wc, src(), *p); err != nil {
+					log.G(ctx).Warn("error copying " + stream)
+				}
+				wg.Done()
+				wc.Close()
+				if rc != nil {
+					rc.Close()
+				}
+			}()
+		}
+	}
 	for _, i := range []struct {
 		name string
 		dest func(wc io.WriteCloser, rc io.Closer)
 	}{
-		{
-			name: stdout,
-			dest: func(wc io.WriteCloser, rc io.Closer) {
-				wg.Add(1)
-				cwg.Add(1)
-				go func() {
-					cwg.Done()
-					p := bufPool.Get().(*[]byte)
-					defer bufPool.Put(p)
-					if _, err := io.CopyBuffer(wc, rio.Stdout(), *p); err != nil {
-						log.G(ctx).Warn("error copying stdout")
-					}
-					wg.Done()
-					wc.Close()
-					if rc != nil {
-						rc.Close()
-					}
-				}()
-			},
-		}, {
-			name: stderr,
-			dest: func(wc io.WriteCloser, rc io.Closer) {
-				wg.Add(1)
-				cwg.Add(1)
-				go func() {
-					cwg.Done()
-					p := bufPool.Get().(*[]byte)
-					defer bufPool.Put(p)
-					if _, err := io.CopyBuffer(wc, rio.Stderr(), *p); err != nil {
-						log.G(ctx).Warn("error copying stderr")
-					}
-					wg.Done()
-					wc.Close()
-					if rc != nil {
-						rc.Close()
-					}
-				}()
-			},
-		},
+		{name: stdout, dest: copyFrom("stdout", rio.Stdout)},
+		{name: stderr, dest: copyFrom("stderr", rio.Stderr)},
 	} {
 		ok, err := fifo.IsFifo(i.name)
 		if err != nil {

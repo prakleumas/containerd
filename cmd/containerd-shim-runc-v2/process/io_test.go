@@ -20,10 +20,13 @@ package process
 
 import (
 	"context"
+	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/containerd/containerd/v2/pkg/namespaces"
@@ -108,6 +111,48 @@ func TestNewBinaryIOCleanup(t *testing.T) {
 	after := descriptorCount(t)
 	if before != after {
 		t.Fatalf("some descriptors weren't closed (%d != %d)", before, after)
+	}
+}
+
+type readerIO struct {
+	stdout, stderr io.ReadCloser
+}
+
+func (r *readerIO) Close() error          { return nil }
+func (r *readerIO) Stdin() io.WriteCloser { return nil }
+func (r *readerIO) Stdout() io.ReadCloser { return r.stdout }
+func (r *readerIO) Stderr() io.ReadCloser { return r.stderr }
+func (r *readerIO) Set(*exec.Cmd)         {}
+
+func TestCopyPipesFiles(t *testing.T) {
+	dir := t.TempDir()
+	stdout := filepath.Join(dir, "stdout")
+	stderr := filepath.Join(dir, "stderr")
+	for _, name := range []string{stdout, stderr} {
+		if err := os.WriteFile(name, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rio := &readerIO{
+		stdout: io.NopCloser(strings.NewReader("out")),
+		stderr: io.NopCloser(strings.NewReader("err")),
+	}
+
+	var wg, cwg sync.WaitGroup
+	if err := copyPipes(context.Background(), rio, "", stdout, stderr, &wg, &cwg); err != nil {
+		t.Fatalf("copyPipes() = %v", err)
+	}
+	cwg.Wait()
+	wg.Wait()
+
+	for name, want := range map[string]string{stdout: "out", stderr: "err"} {
+		got, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != want {
+			t.Errorf("copyPipes() wrote %q to %s, want %q", got, filepath.Base(name), want)
+		}
 	}
 }
 
