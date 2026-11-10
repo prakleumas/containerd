@@ -106,10 +106,7 @@ func SendStream(ctx context.Context, r io.Reader, stream streaming.Stream) {
 					remaining = update
 				}
 			}
-			var max int32 = maxRead
-			if max > remaining {
-				max = remaining
-			}
+			max := min(maxRead, remaining)
 			b := (*buf)[:max]
 			n, readErr := r.Read(b)
 			if n > 0 {

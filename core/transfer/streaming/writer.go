@@ -94,13 +94,7 @@ func (wbs *writeByteStream) Write(p []byte) (n int, err error) {
 				continue
 			}
 		}
-		var max int32 = maxRead
-		if max > int32(len(p)) {
-			max = int32(len(p))
-		}
-		if max > remaining {
-			max = remaining
-		}
+		max := min(maxRead, int32(len(p)), remaining)
 		// TODO: continue
 		// remaining = remaining - int32(n)
 
