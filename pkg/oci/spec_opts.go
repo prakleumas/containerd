@@ -694,34 +694,7 @@ func WithUser(userstr string) SpecOpts {
 				s.Process.User.UID, s.Process.User.GID = uid, gid
 				return nil
 			}
-			if c.Snapshotter == "" && c.SnapshotKey == "" {
-				if !isRootfsAbs(s.Root.Path) {
-					return errors.New("rootfs absolute path is required")
-				}
-				rootfs, err := os.OpenRoot(s.Root.Path)
-				if err != nil {
-					return err
-				}
-				defer rootfs.Close()
-				return f(rootfs.FS())
-			}
-			if c.Snapshotter == "" {
-				return errors.New("no snapshotter set for container")
-			}
-			if c.SnapshotKey == "" {
-				return errors.New("rootfs snapshot not created for container")
-			}
-			snapshotter := client.SnapshotService(c.Snapshotter)
-			mounts, err := snapshotter.Mounts(ctx, c.SnapshotKey)
-			if err != nil {
-				return err
-			}
-
-			// Use a read-only mount when trying to get user/group information
-			// from the container's rootfs. Since the option does read operation
-			// only, we append ReadOnly mount option to prevent the Linux kernel
-			// from syncing whole filesystem in umount syscall.
-			return withReadonlyFS(ctx, client, mounts, f)
+			return withContainerRootFS(ctx, client, c, s, f)
 		default:
 			return fmt.Errorf("invalid USER value %s", userstr)
 		}
@@ -773,34 +746,7 @@ func WithUserID(uid uint32) SpecOpts {
 			s.Process.User.UID, s.Process.User.GID = uint32(usr.Uid), uint32(usr.Gid)
 			return nil
 		}
-		if c.Snapshotter == "" && c.SnapshotKey == "" {
-			if !isRootfsAbs(s.Root.Path) {
-				return errors.New("rootfs absolute path is required")
-			}
-			rootfs, err := os.OpenRoot(s.Root.Path)
-			if err != nil {
-				return err
-			}
-			defer rootfs.Close()
-			return setUser(rootfs.FS())
-		}
-		if c.Snapshotter == "" {
-			return errors.New("no snapshotter set for container")
-		}
-		if c.SnapshotKey == "" {
-			return errors.New("rootfs snapshot not created for container")
-		}
-		snapshotter := client.SnapshotService(c.Snapshotter)
-		mounts, err := snapshotter.Mounts(ctx, c.SnapshotKey)
-		if err != nil {
-			return err
-		}
-
-		// Use a read-only mount when trying to get user/group information
-		// from the container's rootfs. Since the option does read operation
-		// only, we append ReadOnly mount option to prevent the Linux kernel
-		// from syncing whole filesystem in umount syscall.
-		return withReadonlyFS(ctx, client, mounts, setUser)
+		return withContainerRootFS(ctx, client, c, s, setUser)
 	}
 }
 
@@ -826,34 +772,7 @@ func WithUsername(username string) SpecOpts {
 				s.Process.User.UID, s.Process.User.GID = uint32(usr.Uid), uint32(usr.Gid)
 				return nil
 			}
-			if c.Snapshotter == "" && c.SnapshotKey == "" {
-				if !isRootfsAbs(s.Root.Path) {
-					return errors.New("rootfs absolute path is required")
-				}
-				rootfs, err := os.OpenRoot(s.Root.Path)
-				if err != nil {
-					return err
-				}
-				defer rootfs.Close()
-				return setUser(rootfs.FS())
-			}
-			if c.Snapshotter == "" {
-				return errors.New("no snapshotter set for container")
-			}
-			if c.SnapshotKey == "" {
-				return errors.New("rootfs snapshot not created for container")
-			}
-			snapshotter := client.SnapshotService(c.Snapshotter)
-			mounts, err := snapshotter.Mounts(ctx, c.SnapshotKey)
-			if err != nil {
-				return err
-			}
-
-			// Use a read-only mount when trying to get user/group information
-			// from the container's rootfs. Since the option does read operation
-			// only, we append ReadOnly mount option to prevent the Linux kernel
-			// from syncing whole filesystem in umount syscall.
-			return withReadonlyFS(ctx, client, mounts, setUser)
+			return withContainerRootFS(ctx, client, c, s, setUser)
 		} else if s.Windows != nil {
 			s.Process.User.Username = username
 		} else {
@@ -908,35 +827,43 @@ func WithAdditionalGIDs(userstr string) SpecOpts {
 			s.Process.User.AdditionalGids = gids
 			return nil
 		}
-		if c.Snapshotter == "" && c.SnapshotKey == "" {
-			if !isRootfsAbs(s.Root.Path) {
-				return errors.New("rootfs absolute path is required")
-			}
-			rootfs, err := os.OpenRoot(s.Root.Path)
-			if err != nil {
-				return err
-			}
-			defer rootfs.Close()
-			return setAdditionalGids(rootfs.FS())
+		return withContainerRootFS(ctx, client, c, s, setAdditionalGids)
+	}
+}
+
+// withContainerRootFS calls fn with the container's root filesystem. When
+// the container has no snapshotter and no snapshot key, fn reads the
+// directory at s.Root.Path; otherwise fn reads a read-only view of the
+// container's snapshot mounts.
+func withContainerRootFS(ctx context.Context, client Client, c *containers.Container, s *Spec, fn func(fs.FS) error) error {
+	if c.Snapshotter == "" && c.SnapshotKey == "" {
+		if !isRootfsAbs(s.Root.Path) {
+			return errors.New("rootfs absolute path is required")
 		}
-		if c.Snapshotter == "" {
-			return errors.New("no snapshotter set for container")
-		}
-		if c.SnapshotKey == "" {
-			return errors.New("rootfs snapshot not created for container")
-		}
-		snapshotter := client.SnapshotService(c.Snapshotter)
-		mounts, err := snapshotter.Mounts(ctx, c.SnapshotKey)
+		rootfs, err := os.OpenRoot(s.Root.Path)
 		if err != nil {
 			return err
 		}
-
-		// Use a read-only mount when trying to get user/group information
-		// from the container's rootfs. Since the option does read operation
-		// only, we append ReadOnly mount option to prevent the Linux kernel
-		// from syncing whole filesystem in umount syscall.
-		return withReadonlyFS(ctx, client, mounts, setAdditionalGids)
+		defer rootfs.Close()
+		return fn(rootfs.FS())
 	}
+	if c.Snapshotter == "" {
+		return errors.New("no snapshotter set for container")
+	}
+	if c.SnapshotKey == "" {
+		return errors.New("rootfs snapshot not created for container")
+	}
+	snapshotter := client.SnapshotService(c.Snapshotter)
+	mounts, err := snapshotter.Mounts(ctx, c.SnapshotKey)
+	if err != nil {
+		return err
+	}
+
+	// Use a read-only mount when trying to get user/group information
+	// from the container's rootfs. Since the option does read operation
+	// only, we append ReadOnly mount option to prevent the Linux kernel
+	// from syncing whole filesystem in umount syscall.
+	return withReadonlyFS(ctx, client, mounts, fn)
 }
 
 func withReadonlyFS(ctx context.Context, client Client, mounts []mount.Mount, fn func(fs.FS) error) error {
@@ -1027,34 +954,7 @@ func WithAppendAdditionalGroups(groups ...string) SpecOpts {
 			s.Process.User.AdditionalGids = append(s.Process.User.AdditionalGids, gids...)
 			return nil
 		}
-		if c.Snapshotter == "" && c.SnapshotKey == "" {
-			if !filepath.IsAbs(s.Root.Path) {
-				return errors.New("rootfs absolute path is required")
-			}
-			rootfs, err := os.OpenRoot(s.Root.Path)
-			if err != nil {
-				return err
-			}
-			defer rootfs.Close()
-			return setAdditionalGids(rootfs.FS())
-		}
-		if c.Snapshotter == "" {
-			return errors.New("no snapshotter set for container")
-		}
-		if c.SnapshotKey == "" {
-			return errors.New("rootfs snapshot not created for container")
-		}
-		snapshotter := client.SnapshotService(c.Snapshotter)
-		mounts, err := snapshotter.Mounts(ctx, c.SnapshotKey)
-		if err != nil {
-			return err
-		}
-
-		// Use a read-only mount when trying to get user/group information
-		// from the container's rootfs. Since the option does read operation
-		// only, we append ReadOnly mount option to prevent the Linux kernel
-		// from syncing whole filesystem in umount syscall.
-		return withReadonlyFS(ctx, client, mounts, setAdditionalGids)
+		return withContainerRootFS(ctx, client, c, s, setAdditionalGids)
 	}
 }
 
