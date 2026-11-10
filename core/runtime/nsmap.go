@@ -19,6 +19,8 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/containerd/containerd/v2/pkg/namespaces"
@@ -67,12 +69,10 @@ func (m *NSMap[T]) Get(ctx context.Context, id string) (T, error) {
 func (m *NSMap[T]) GetAll(ctx context.Context, noNS bool) ([]T, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var o []T
 	if noNS {
-		for ns := range m.objects {
-			for _, t := range m.objects[ns] {
-				o = append(o, t)
-			}
+		var o []T
+		for _, tasks := range m.objects {
+			o = slices.AppendSeq(o, maps.Values(tasks))
 		}
 		return o, nil
 	}
@@ -80,14 +80,7 @@ func (m *NSMap[T]) GetAll(ctx context.Context, noNS bool) ([]T, error) {
 	if err != nil {
 		return nil, err
 	}
-	tasks, ok := m.objects[namespace]
-	if !ok {
-		return o, nil
-	}
-	for _, t := range tasks {
-		o = append(o, t)
-	}
-	return o, nil
+	return slices.Collect(maps.Values(m.objects[namespace])), nil
 }
 
 // Add a task
