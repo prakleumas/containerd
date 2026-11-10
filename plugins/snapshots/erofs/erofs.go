@@ -39,6 +39,7 @@ import (
 	"github.com/containerd/containerd/v2/internal/erofsutils"
 	"github.com/containerd/containerd/v2/internal/fsverity"
 	"github.com/containerd/containerd/v2/internal/userns"
+	"github.com/containerd/containerd/v2/plugins/snapshots/overlay/overlayutils"
 )
 
 const snapshotTempDirPrefix = "new-"
@@ -1101,38 +1102,12 @@ func (s *snapshotter) Mounts(ctx context.Context, key string) (_ []mount.Mount, 
 }
 
 func (s *snapshotter) getCleanupDirectories(ctx context.Context) ([]string, error) {
-	ids, err := storage.IDMap(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshotDir := filepath.Join(s.root, "snapshots")
-	fd, err := os.Open(snapshotDir)
-	if err != nil {
-		return nil, err
-	}
-	defer fd.Close()
-
-	dirs, err := fd.Readdirnames(0)
-	if err != nil {
-		return nil, err
-	}
-
-	cleanup := []string{}
-	for _, d := range dirs {
-		// A new-* directory may belong to a concurrent snapshot creation. It is
-		// renamed to its metadata ID after the writer transaction is acquired, so
-		// Remove must not treat it as an orphan in the meantime.
-		if strings.HasPrefix(d, snapshotTempDirPrefix) {
-			continue
-		}
-		if _, ok := ids[d]; ok {
-			continue
-		}
-		cleanup = append(cleanup, filepath.Join(snapshotDir, d))
-	}
-
-	return cleanup, nil
+	// A new-* directory may belong to a concurrent snapshot creation. It is
+	// renamed to its metadata ID after the writer transaction is acquired, so
+	// Remove must not treat it as an orphan in the meantime.
+	return overlayutils.OrphanDirs(ctx, filepath.Join(s.root, "snapshots"), func(name string) bool {
+		return strings.HasPrefix(name, snapshotTempDirPrefix)
+	})
 }
 
 // Remove abandons the snapshot identified by key. The snapshot will

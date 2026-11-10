@@ -400,32 +400,7 @@ func (o *snapshotter) cleanupDirectories(ctx context.Context) (_ []string, err e
 }
 
 func (o *snapshotter) getCleanupDirectories(ctx context.Context) ([]string, error) {
-	ids, err := storage.IDMap(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshotDir := filepath.Join(o.root, "snapshots")
-	fd, err := os.Open(snapshotDir)
-	if err != nil {
-		return nil, err
-	}
-	defer fd.Close()
-
-	dirs, err := fd.Readdirnames(0)
-	if err != nil {
-		return nil, err
-	}
-
-	cleanup := []string{}
-	for _, d := range dirs {
-		if _, ok := ids[d]; ok {
-			continue
-		}
-		cleanup = append(cleanup, filepath.Join(snapshotDir, d))
-	}
-
-	return cleanup, nil
+	return overlayutils.OrphanDirs(ctx, filepath.Join(o.root, "snapshots"), nil)
 }
 
 func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, key, parent string, opts []snapshots.Opt) (_ []mount.Mount, err error) {
