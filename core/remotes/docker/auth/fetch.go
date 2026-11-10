@@ -131,21 +131,9 @@ func FetchTokenWithOAuth(ctx context.Context, client *http.Client, headers http.
 		req.Header.Set("User-Agent", "containerd/"+version.Version)
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return nil, remoteserrors.NewUnexpectedStatusErr(resp)
-	}
-
-	decoder := json.NewDecoder(resp.Body)
-
 	var tr OAuthTokenResponse
-	if err = decoder.Decode(&tr); err != nil {
-		return nil, fmt.Errorf("unable to decode token response: %w", err)
+	if err := sendTokenRequest(client, req, &tr); err != nil {
+		return nil, err
 	}
 
 	if tr.AccessToken == "" {
@@ -202,21 +190,9 @@ func FetchToken(ctx context.Context, client *http.Client, headers http.Header, t
 
 	req.URL.RawQuery = reqParams.Encode()
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return nil, remoteserrors.NewUnexpectedStatusErr(resp)
-	}
-
-	decoder := json.NewDecoder(resp.Body)
-
 	var tr FetchTokenResponse
-	if err = decoder.Decode(&tr); err != nil {
-		return nil, fmt.Errorf("unable to decode token response: %w", err)
+	if err := sendTokenRequest(client, req, &tr); err != nil {
+		return nil, err
 	}
 
 	// `access_token` is equivalent to `token` and if both are specified
@@ -231,4 +207,23 @@ func FetchToken(ctx context.Context, client *http.Client, headers http.Header, t
 	}
 
 	return &tr, nil
+}
+
+// sendTokenRequest sends req with client and decodes the JSON response body
+// into v.
+func sendTokenRequest(client *http.Client, req *http.Request, v any) error {
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return remoteserrors.NewUnexpectedStatusErr(resp)
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		return fmt.Errorf("unable to decode token response: %w", err)
+	}
+	return nil
 }
