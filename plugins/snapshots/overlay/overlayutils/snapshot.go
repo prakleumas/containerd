@@ -18,11 +18,35 @@ package overlayutils
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
+	"github.com/containerd/containerd/v2/internal/userns"
 )
+
+// IDMapRoot returns the host UID and GID that container root maps to under
+// the snapshot ID mapping labels in labels. It returns -1, -1 when labels
+// has neither mapping label.
+func IDMapRoot(labels map[string]string) (uid, gid int, err error) {
+	uidmapLabel, hasUID := labels[snapshots.LabelSnapshotUIDMapping]
+	gidmapLabel, hasGID := labels[snapshots.LabelSnapshotGIDMapping]
+	if !hasUID && !hasGID {
+		return -1, -1, nil
+	}
+
+	var idMap userns.IDMap
+	if err := idMap.Unmarshal(uidmapLabel, gidmapLabel); err != nil {
+		return -1, -1, fmt.Errorf("failed to unmarshal snapshot ID mapped labels: %w", err)
+	}
+	root, err := idMap.RootPair()
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to find root pair: %w", err)
+	}
+	return int(root.Uid), int(root.Gid), nil
+}
 
 // OrphanDirs returns the paths of the entries in snapshotDir that have no
 // snapshot ID in the metadata store, skipping each name for which skip

@@ -30,7 +30,6 @@ import (
 	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/snapshots"
 	"github.com/containerd/containerd/v2/core/snapshots/storage"
-	"github.com/containerd/containerd/v2/internal/userns"
 	"github.com/containerd/containerd/v2/plugins/snapshots/overlay/overlayutils"
 	"github.com/containerd/continuity/fs"
 	"github.com/containerd/log"
@@ -443,35 +442,14 @@ func (o *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 			return fmt.Errorf("failed to get snapshot info: %w", err)
 		}
 
-		var (
-			mappedUID, mappedGID     = -1, -1
-			uidmapLabel, gidmapLabel string
-			needsRemap               = false
-		)
 		// NOTE: if idmapped mounts' supported by hosted kernel there may be
 		// no parents at all, so overlayfs will not work and snapshotter
 		// will use bind mount. To be able to create file objects inside the
 		// rootfs -- just chown this only bound directory according to provided
 		// {uid,gid}map. In case of one/multiple parents -- chown upperdir.
-		if v, ok := info.Labels[snapshots.LabelSnapshotUIDMapping]; ok {
-			uidmapLabel = v
-			needsRemap = true
-		}
-		if v, ok := info.Labels[snapshots.LabelSnapshotGIDMapping]; ok {
-			gidmapLabel = v
-			needsRemap = true
-		}
-
-		if needsRemap {
-			var idMap userns.IDMap
-			if err = idMap.Unmarshal(uidmapLabel, gidmapLabel); err != nil {
-				return fmt.Errorf("failed to unmarshal snapshot ID mapped labels: %w", err)
-			}
-			root, err := idMap.RootPair()
-			if err != nil {
-				return fmt.Errorf("failed to find root pair: %w", err)
-			}
-			mappedUID, mappedGID = int(root.Uid), int(root.Gid)
+		mappedUID, mappedGID, err := overlayutils.IDMapRoot(info.Labels)
+		if err != nil {
+			return err
 		}
 
 		if mappedUID == -1 || mappedGID == -1 {

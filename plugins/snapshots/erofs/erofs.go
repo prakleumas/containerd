@@ -38,7 +38,6 @@ import (
 	"github.com/containerd/containerd/v2/internal/dmverity"
 	"github.com/containerd/containerd/v2/internal/erofsutils"
 	"github.com/containerd/containerd/v2/internal/fsverity"
-	"github.com/containerd/containerd/v2/internal/userns"
 	"github.com/containerd/containerd/v2/plugins/snapshots/overlay/overlayutils"
 )
 
@@ -798,30 +797,9 @@ func (s *snapshotter) createSnapshot(ctx context.Context, kind snapshots.Kind, k
 		// In block mode the upperdir lives inside the block image,
 		// so host ownership is irrelevant.
 		if !s.blockMode {
-			var (
-				mappedUID, mappedGID     = -1, -1
-				uidmapLabel, gidmapLabel string
-				needsRemap               = false
-			)
-			if v, ok := info.Labels[snapshots.LabelSnapshotUIDMapping]; ok {
-				uidmapLabel = v
-				needsRemap = true
-			}
-			if v, ok := info.Labels[snapshots.LabelSnapshotGIDMapping]; ok {
-				gidmapLabel = v
-				needsRemap = true
-			}
-
-			if needsRemap {
-				var idMap userns.IDMap
-				if err = idMap.Unmarshal(uidmapLabel, gidmapLabel); err != nil {
-					return fmt.Errorf("failed to unmarshal snapshot ID mapped labels: %w", err)
-				}
-				root, err := idMap.RootPair()
-				if err != nil {
-					return fmt.Errorf("failed to find root pair: %w", err)
-				}
-				mappedUID, mappedGID = int(root.Uid), int(root.Gid)
+			mappedUID, mappedGID, err := overlayutils.IDMapRoot(info.Labels)
+			if err != nil {
+				return err
 			}
 
 			// Fall back to copying ownership from parent if no ID mapping labels
