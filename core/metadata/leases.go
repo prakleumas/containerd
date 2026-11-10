@@ -265,45 +265,19 @@ func (lm *leaseManager) ListResources(ctx context.Context, lease leases.Lease) (
 			return fmt.Errorf("lease %q: %w", lease.ID, errdefs.ErrNotFound)
 		}
 
-		// content resources
-		if cbkt := topbkt.Bucket(bucketKeyObjectContent); cbkt != nil {
-			if err := cbkt.ForEach(func(k, _ []byte) error {
-				rs = append(rs, leases.Resource{
-					ID:   string(k),
-					Type: string(bucketKeyObjectContent),
-				})
+		// content, images, and ingest resources
+		for _, key := range [][]byte{bucketKeyObjectContent, bucketKeyObjectImages, bucketKeyObjectIngests} {
+			if bkt := topbkt.Bucket(key); bkt != nil {
+				if err := bkt.ForEach(func(k, _ []byte) error {
+					rs = append(rs, leases.Resource{
+						ID:   string(k),
+						Type: string(key),
+					})
 
-				return nil
-			}); err != nil {
-				return err
-			}
-		}
-
-		// images resources
-		if ibkt := topbkt.Bucket(bucketKeyObjectImages); ibkt != nil {
-			if err := ibkt.ForEach(func(k, _ []byte) error {
-				rs = append(rs, leases.Resource{
-					ID:   string(k),
-					Type: string(bucketKeyObjectImages),
-				})
-
-				return nil
-			}); err != nil {
-				return err
-			}
-		}
-
-		// ingest resources
-		if lbkt := topbkt.Bucket(bucketKeyObjectIngests); lbkt != nil {
-			if err := lbkt.ForEach(func(k, _ []byte) error {
-				rs = append(rs, leases.Resource{
-					ID:   string(k),
-					Type: string(bucketKeyObjectIngests),
-				})
-
-				return nil
-			}); err != nil {
-				return err
+					return nil
+				}); err != nil {
+					return err
+				}
 			}
 		}
 
