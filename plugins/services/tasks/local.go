@@ -293,15 +293,9 @@ func (l *local) Create(ctx context.Context, r *api.CreateTaskRequest, _ ...grpc.
 }
 
 func (l *local) Start(ctx context.Context, r *api.StartRequest, _ ...grpc.CallOption) (*api.StartResponse, error) {
-	t, err := l.getTask(ctx, r.ContainerID)
+	p, err := l.getProcess(ctx, r.ContainerID, r.ExecID)
 	if err != nil {
 		return nil, err
-	}
-	p := runtime.Process(t)
-	if r.ExecID != "" {
-		if p, err = t.Process(ctx, r.ExecID); err != nil {
-			return nil, errgrpc.ToGRPC(err)
-		}
 	}
 	if err := p.Start(ctx); err != nil {
 		return nil, errgrpc.ToGRPC(err)
@@ -404,15 +398,9 @@ func getProcessState(ctx context.Context, p runtime.Process) (*task.Process, err
 }
 
 func (l *local) Get(ctx context.Context, r *api.GetRequest, _ ...grpc.CallOption) (*api.GetResponse, error) {
-	task, err := l.getTask(ctx, r.ContainerID)
+	p, err := l.getProcess(ctx, r.ContainerID, r.ExecID)
 	if err != nil {
 		return nil, err
-	}
-	p := runtime.Process(task)
-	if r.ExecID != "" {
-		if p, err = task.Process(ctx, r.ExecID); err != nil {
-			return nil, errgrpc.ToGRPC(err)
-		}
 	}
 	t, err := getProcessState(ctx, p)
 	if err != nil {
@@ -471,15 +459,9 @@ func (l *local) Resume(ctx context.Context, r *api.ResumeTaskRequest, _ ...grpc.
 }
 
 func (l *local) Kill(ctx context.Context, r *api.KillRequest, _ ...grpc.CallOption) (*ptypes.Empty, error) {
-	t, err := l.getTask(ctx, r.ContainerID)
+	p, err := l.getProcess(ctx, r.ContainerID, r.ExecID)
 	if err != nil {
 		return nil, err
-	}
-	p := runtime.Process(t)
-	if r.ExecID != "" {
-		if p, err = t.Process(ctx, r.ExecID); err != nil {
-			return nil, errgrpc.ToGRPC(err)
-		}
 	}
 	if err := p.Kill(ctx, r.Signal, r.All); err != nil {
 		return nil, errgrpc.ToGRPC(err)
@@ -538,15 +520,9 @@ func (l *local) Exec(ctx context.Context, r *api.ExecProcessRequest, _ ...grpc.C
 }
 
 func (l *local) ResizePty(ctx context.Context, r *api.ResizePtyRequest, _ ...grpc.CallOption) (*ptypes.Empty, error) {
-	t, err := l.getTask(ctx, r.ContainerID)
+	p, err := l.getProcess(ctx, r.ContainerID, r.ExecID)
 	if err != nil {
 		return nil, err
-	}
-	p := runtime.Process(t)
-	if r.ExecID != "" {
-		if p, err = t.Process(ctx, r.ExecID); err != nil {
-			return nil, errgrpc.ToGRPC(err)
-		}
 	}
 	if err := p.ResizePty(ctx, runtime.ConsoleSize{
 		Width:  r.Width,
@@ -558,15 +534,9 @@ func (l *local) ResizePty(ctx context.Context, r *api.ResizePtyRequest, _ ...grp
 }
 
 func (l *local) CloseIO(ctx context.Context, r *api.CloseIORequest, _ ...grpc.CallOption) (*ptypes.Empty, error) {
-	t, err := l.getTask(ctx, r.ContainerID)
+	p, err := l.getProcess(ctx, r.ContainerID, r.ExecID)
 	if err != nil {
 		return nil, err
-	}
-	p := runtime.Process(t)
-	if r.ExecID != "" {
-		if p, err = t.Process(ctx, r.ExecID); err != nil {
-			return nil, errgrpc.ToGRPC(err)
-		}
 	}
 	if r.Stdin {
 		if err := p.CloseIO(ctx); err != nil {
@@ -661,15 +631,9 @@ func (l *local) Metrics(ctx context.Context, r *api.MetricsRequest, _ ...grpc.Ca
 }
 
 func (l *local) Wait(ctx context.Context, r *api.WaitRequest, _ ...grpc.CallOption) (*api.WaitResponse, error) {
-	t, err := l.getTask(ctx, r.ContainerID)
+	p, err := l.getProcess(ctx, r.ContainerID, r.ExecID)
 	if err != nil {
 		return nil, err
-	}
-	p := runtime.Process(t)
-	if r.ExecID != "" {
-		if p, err = t.Process(ctx, r.ExecID); err != nil {
-			return nil, errgrpc.ToGRPC(err)
-		}
 	}
 	exit, err := p.Wait(ctx)
 	if err != nil {
@@ -749,6 +713,24 @@ func (l *local) getTask(ctx context.Context, id string) (runtime.Task, error) {
 		return nil, err
 	}
 	return l.getTaskFromContainer(ctx, container)
+}
+
+// getProcess returns the init process of the container's task when execID
+// is empty, and the exec process named by execID otherwise. The returned
+// error is a gRPC error.
+func (l *local) getProcess(ctx context.Context, containerID, execID string) (runtime.Process, error) {
+	t, err := l.getTask(ctx, containerID)
+	if err != nil {
+		return nil, err
+	}
+	if execID == "" {
+		return t, nil
+	}
+	p, err := t.Process(ctx, execID)
+	if err != nil {
+		return nil, errgrpc.ToGRPC(err)
+	}
+	return p, nil
 }
 
 func (l *local) getTaskFromContainer(ctx context.Context, container *containers.Container) (runtime.Task, error) {
