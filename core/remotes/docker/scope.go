@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/containerd/containerd/v2/pkg/reference"
@@ -80,22 +80,9 @@ func GetTokenScopes(ctx context.Context, common []string) []string {
 	}
 
 	scopes = append(scopes, common...)
-	sort.Strings(scopes)
+	slices.Sort(scopes)
 
-	if len(scopes) == 0 {
-		return scopes
-	}
-
-	l := 0
-	for idx := 1; idx < len(scopes); idx++ {
-		// Note: this comparison is unaware of the scope grammar (https://distribution.github.io/distribution/spec/auth/scope/)
-		// So, "repository:foo/bar:pull,push" != "repository:foo/bar:push,pull", although semantically they are equal.
-		if scopes[l] == scopes[idx] {
-			continue
-		}
-
-		l++
-		scopes[l] = scopes[idx]
-	}
-	return scopes[:l+1]
+	// Note: this comparison is unaware of the scope grammar (https://distribution.github.io/distribution/spec/auth/scope/)
+	// So, "repository:foo/bar:pull,push" != "repository:foo/bar:push,pull", although semantically they are equal.
+	return slices.Compact(scopes)
 }
