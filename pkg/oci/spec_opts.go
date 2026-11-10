@@ -223,14 +223,7 @@ func replaceOrAppendEnvValues(defaults, overrides []string) []string {
 	}
 
 	// Now remove all entries that we want to "unset"
-	for i := 0; i < len(results); i++ {
-		if results[i] == "" {
-			results = append(results[:i], results[i+1:]...)
-			i--
-		}
-	}
-
-	return results
+	return slices.DeleteFunc(results, func(e string) bool { return e == "" })
 }
 
 // WithProcessArgs replaces the args on the generated spec
@@ -309,13 +302,9 @@ func WithoutMounts(dests ...string) SpecOpts {
 			mounts  []specs.Mount
 			current = s.Mounts
 		)
-	mLoop:
 		for _, m := range current {
-			mDestination := filepath.Clean(m.Destination)
-			for _, dest := range dests {
-				if mDestination == dest {
-					continue mLoop
-				}
+			if slices.Contains(dests, filepath.Clean(m.Destination)) {
+				continue
 			}
 			mounts = append(mounts, m)
 		}
@@ -1076,10 +1065,6 @@ func WithCapabilities(caps []string) SpecOpts {
 	}
 }
 
-func capsContain(caps []string, s string) bool {
-	return slices.Contains(caps, s)
-}
-
 func removeCap(caps *[]string, s string) {
 	var newcaps []string
 	for _, c := range *caps {
@@ -1094,7 +1079,7 @@ func removeCap(caps *[]string, s string) {
 func filterCaps(caps *[]string, filters []string) {
 	var newcaps []string
 	for _, c := range *caps {
-		if capsContain(filters, c) {
+		if slices.Contains(filters, c) {
 			newcaps = append(newcaps, c)
 		}
 	}
@@ -1111,7 +1096,7 @@ func WithAddedCapabilities(caps []string) SpecOpts {
 				&s.Process.Capabilities.Effective,
 				&s.Process.Capabilities.Permitted,
 			} {
-				if !capsContain(*cl, c) {
+				if !slices.Contains(*cl, c) {
 					*cl = append(*cl, c)
 				}
 			}

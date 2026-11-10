@@ -20,6 +20,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -57,7 +58,7 @@ func TestSetCaps(t *testing.T) {
 		s.Process.Capabilities.Effective,
 		s.Process.Capabilities.Permitted,
 	} {
-		if !capsContain(cl, "CAP_CHOWN") {
+		if !slices.Contains(cl, "CAP_CHOWN") {
 			t.Errorf("cap list %d does not contain added cap", i)
 		}
 		if len(cl) != 1 {
@@ -81,7 +82,7 @@ func TestSetCaps(t *testing.T) {
 		s.Process.Capabilities.Permitted,
 		s.Process.Capabilities.Inheritable,
 	} {
-		if !capsContain(cl, "CAP_CHOWN") {
+		if !slices.Contains(cl, "CAP_CHOWN") {
 			t.Errorf("cap list %d does not contain added cap", i)
 		}
 		if len(cl) != 1 {
@@ -104,7 +105,7 @@ func TestSetCaps(t *testing.T) {
 		s.Process.Capabilities.Effective,
 		s.Process.Capabilities.Permitted,
 	} {
-		if !capsContain(cl, "CAP_CHOWN") {
+		if !slices.Contains(cl, "CAP_CHOWN") {
 			t.Errorf("cap list %d does not contain added cap", i)
 		}
 		if len(cl) != 1 {
@@ -129,7 +130,7 @@ func TestAddCaps(t *testing.T) {
 		s.Process.Capabilities.Effective,
 		s.Process.Capabilities.Permitted,
 	} {
-		if !capsContain(cl, "CAP_CHOWN") {
+		if !slices.Contains(cl, "CAP_CHOWN") {
 			t.Errorf("cap list %d does not contain added cap", i)
 		}
 	}
@@ -156,7 +157,7 @@ func TestDropCaps(t *testing.T) {
 		s.Process.Capabilities.Permitted,
 		s.Process.Capabilities.Inheritable,
 	} {
-		if capsContain(cl, "CAP_CHOWN") {
+		if slices.Contains(cl, "CAP_CHOWN") {
 			t.Errorf("cap list %d contains dropped cap", i)
 		}
 	}
@@ -175,10 +176,10 @@ func TestDropCaps(t *testing.T) {
 		s.Process.Capabilities.Permitted,
 		s.Process.Capabilities.Inheritable,
 	} {
-		if capsContain(cl, "CAP_FOWNER") {
+		if slices.Contains(cl, "CAP_FOWNER") {
 			t.Errorf("cap list %d contains dropped cap", i)
 		}
-		if !capsContain(cl, "CAP_CHOWN") {
+		if !slices.Contains(cl, "CAP_CHOWN") {
 			t.Errorf("cap list %d doesn't contain non-dropped cap", i)
 		}
 	}
