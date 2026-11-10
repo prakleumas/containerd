@@ -62,6 +62,18 @@ var fifoFlags = []cli.Flag{
 	},
 }
 
+var apiVersionFlag = &cli.IntFlag{
+	Name:  "api-version",
+	Usage: "shim API version {2,3}",
+	Value: 3,
+	Action: func(ctx context.Context, cmd *cli.Command, v int) error {
+		if v != 2 && v != 3 {
+			return errors.New("api-version must be 2 or 3")
+		}
+		return nil
+	},
+}
+
 // Command is the cli command for interacting with a task
 var Command = &cli.Command{
 	Name:  "shim",
@@ -127,17 +139,7 @@ var shutdownCommand = &cli.Command{
 	Name:  "shutdown",
 	Usage: "Shutdown shim if there is no active container",
 	Flags: []cli.Flag{
-		&cli.IntFlag{
-			Name:  "api-version",
-			Usage: "shim API version {2,3}",
-			Value: 3,
-			Action: func(ctx context.Context, cmd *cli.Command, v int) error {
-				if v != 2 && v != 3 {
-					return errors.New("api-version must be 2 or 3")
-				}
-				return nil
-			},
-		},
+		apiVersionFlag,
 	},
 	DisableSliceFlagSeparator: true,
 	Action: func(ctx context.Context, cmd *cli.Command) error {
@@ -174,17 +176,7 @@ var stateCommand = &cli.Command{
 			Aliases: []string{"t"},
 			Usage:   "task ID",
 		},
-		&cli.IntFlag{
-			Name:  "api-version",
-			Usage: "shim API version {2,3}",
-			Value: 3,
-			Action: func(ctx context.Context, cmd *cli.Command, v int) error {
-				if v != 2 && v != 3 {
-					return errors.New("api-version must be 2 or 3")
-				}
-				return nil
-			},
-		},
+		apiVersionFlag,
 	},
 	DisableSliceFlagSeparator: true,
 	Action: func(ctx context.Context, cmd *cli.Command) error {
