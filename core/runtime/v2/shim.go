@@ -38,7 +38,6 @@ import (
 	eventstypes "github.com/containerd/containerd/api/events"
 	bootapi "github.com/containerd/containerd/api/runtime/bootstrap/v1"
 	task "github.com/containerd/containerd/api/runtime/task/v3"
-	"github.com/containerd/containerd/api/types"
 	"github.com/containerd/errdefs"
 	"github.com/containerd/errdefs/pkg/errgrpc"
 	"github.com/containerd/log"
@@ -47,6 +46,7 @@ import (
 	"github.com/containerd/typeurl/v2"
 
 	"github.com/containerd/containerd/v2/core/events/exchange"
+	"github.com/containerd/containerd/v2/core/mount"
 	"github.com/containerd/containerd/v2/core/runtime"
 	"github.com/containerd/containerd/v2/pkg/archive"
 	"github.com/containerd/containerd/v2/pkg/archive/compression"
@@ -713,14 +713,7 @@ func (s *shimTask) Create(ctx context.Context, opts runtime.CreateOpts) (runtime
 		Terminal:   opts.IO.Terminal,
 		Checkpoint: opts.Checkpoint,
 		Options:    typeurl.MarshalProto(topts),
-	}
-	for _, m := range opts.Rootfs {
-		request.Rootfs = append(request.Rootfs, &types.Mount{
-			Type:    m.Type,
-			Source:  m.Source,
-			Target:  m.Target,
-			Options: m.Options,
-		})
+		Rootfs:     mount.ToProto(opts.Rootfs),
 	}
 
 	_, err := s.task.Create(ctx, request)
