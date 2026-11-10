@@ -17,14 +17,13 @@
 package content
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
-	"sort"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -216,21 +215,11 @@ var (
 
 				fmt.Fprintln(tw, "DIGEST\tSIZE\tAGE\tLABELS")
 				walkFn = func(info content.Info) error {
-					var labelStrings []string
-					for k, v := range info.Labels {
-						labelStrings = append(labelStrings, strings.Join([]string{k, v}, "="))
-					}
-					sort.Strings(labelStrings)
-					labels := strings.Join(labelStrings, ",")
-					if labels == "" {
-						labels = "-"
-					}
-
 					fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
 						info.Digest,
 						units.HumanSize(float64(info.Size)),
 						units.HumanDuration(time.Since(info.CreatedAt)),
-						labels)
+						cmp.Or(commands.FormatLabels(info.Labels), "-"))
 					return nil
 				}
 
@@ -283,12 +272,7 @@ var (
 				return err
 			}
 
-			var labelStrings []string
-			for k, v := range info.Labels {
-				labelStrings = append(labelStrings, fmt.Sprintf("%s=%s", k, v))
-			}
-
-			fmt.Println(strings.Join(labelStrings, ","))
+			fmt.Println(commands.FormatLabels(info.Labels))
 
 			return nil
 		},

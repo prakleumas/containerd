@@ -17,10 +17,10 @@
 package leases
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -83,15 +83,7 @@ var listCommand = &cli.Command{
 		tw := tabwriter.NewWriter(os.Stdout, 1, 8, 1, ' ', 0)
 		fmt.Fprintln(tw, "ID\tCREATED AT\tLABELS\t")
 		for _, l := range leaseList {
-			labels := "-"
-			if len(l.Labels) > 0 {
-				var pairs []string
-				for k, v := range l.Labels {
-					pairs = append(pairs, fmt.Sprintf("%v=%v", k, v))
-				}
-				sort.Strings(pairs)
-				labels = strings.Join(pairs, ",")
-			}
+			labels := cmp.Or(commands.FormatLabels(l.Labels), "-")
 
 			fmt.Fprintf(tw, "%v\t%v\t%s\t\n",
 				l.ID,

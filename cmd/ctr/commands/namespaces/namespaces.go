@@ -21,8 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/containerd/containerd/v2/cmd/ctr/commands"
@@ -135,13 +133,7 @@ var listCommand = &cli.Command{
 				return err
 			}
 
-			var labelStrings []string
-			for k, v := range labels {
-				labelStrings = append(labelStrings, strings.Join([]string{k, v}, "="))
-			}
-			sort.Strings(labelStrings)
-
-			fmt.Fprintf(tw, "%v\t%v\t\n", ns, strings.Join(labelStrings, ","))
+			fmt.Fprintf(tw, "%v\t%v\t\n", ns, commands.FormatLabels(labels))
 		}
 		return tw.Flush()
 	},

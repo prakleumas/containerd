@@ -554,12 +554,7 @@ var setLabelCommand = &cli.Command{
 			return err
 		}
 
-		var labelStrings []string
-		for k, v := range info.Labels {
-			labelStrings = append(labelStrings, fmt.Sprintf("%s=%s", k, v))
-		}
-
-		fmt.Println(strings.Join(labelStrings, ","))
+		fmt.Println(commands.FormatLabels(info.Labels))
 
 		return nil
 	},

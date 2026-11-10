@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/containerd/containerd/v2/defaults"
@@ -253,6 +254,17 @@ func LabelArgs(labelStrings []string) map[string]string {
 	}
 
 	return labels
+}
+
+// FormatLabels returns labels as sorted, comma-separated "key=value" pairs,
+// or "" when labels is empty.
+func FormatLabels(labels map[string]string) string {
+	pairs := make([]string, 0, len(labels))
+	for k, v := range labels {
+		pairs = append(pairs, k+"="+v)
+	}
+	slices.Sort(pairs)
+	return strings.Join(pairs, ",")
 }
 
 // AnnotationArgs returns a map of annotation key,value pairs.

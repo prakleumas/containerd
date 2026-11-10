@@ -17,6 +17,7 @@
 package images
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -123,15 +124,7 @@ var listCommand = &cli.Command{
 				platformColumn = strings.Join(ps, ",")
 			}
 
-			labels := "-"
-			if len(image.Labels) > 0 {
-				var pairs []string
-				for k, v := range image.Labels {
-					pairs = append(pairs, fmt.Sprintf("%v=%v", k, v))
-				}
-				sort.Strings(pairs)
-				labels = strings.Join(pairs, ",")
-			}
+			labels := cmp.Or(commands.FormatLabels(image.Labels), "-")
 
 			fmt.Fprintf(tw, "%v\t%v\t%v\t%v\t%v\t%s\t\n",
 				image.Name,
@@ -196,12 +189,7 @@ var setLabelsCommand = &cli.Command{
 			return err
 		}
 
-		var labelStrings []string
-		for k, v := range updated.Labels {
-			labelStrings = append(labelStrings, fmt.Sprintf("%s=%s", k, v))
-		}
-
-		fmt.Println(strings.Join(labelStrings, ","))
+		fmt.Println(commands.FormatLabels(updated.Labels))
 
 		return nil
 	},
