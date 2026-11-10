@@ -557,13 +557,8 @@ func readSnapshot(bkt *bolt.Bucket, id *uint64, si *snapshots.Info) error {
 }
 
 func putSnapshot(bkt *bolt.Bucket, id uint64, si snapshots.Info) error {
-	idEncoded, err := encodeID(id)
-	if err != nil {
-		return err
-	}
-
 	updates := [][2][]byte{
-		{bucketKeyID, idEncoded},
+		{bucketKeyID, binary.AppendUvarint(nil, id)},
 		{bucketKeyKind, []byte{byte(si.Kind)}},
 	}
 	if si.Parent != "" {
@@ -593,41 +588,11 @@ func putUsage(bkt *bolt.Bucket, usage snapshots.Usage) error {
 		{bucketKeyInodes, usage.Inodes},
 		{bucketKeySize, usage.Size},
 	} {
-		e, err := encodeSize(v.value)
-		if err != nil {
-			return err
-		}
-		if err := bkt.Put(v.key, e); err != nil {
+		if err := bkt.Put(v.key, binary.AppendVarint(nil, v.value)); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func encodeSize(size int64) ([]byte, error) {
-	var (
-		buf         [binary.MaxVarintLen64]byte
-		sizeEncoded = buf[:]
-	)
-	sizeEncoded = sizeEncoded[:binary.PutVarint(sizeEncoded, size)]
-
-	if len(sizeEncoded) == 0 {
-		return nil, fmt.Errorf("failed encoding size = %v", size)
-	}
-	return sizeEncoded, nil
-}
-
-func encodeID(id uint64) ([]byte, error) {
-	var (
-		buf       [binary.MaxVarintLen64]byte
-		idEncoded = buf[:]
-	)
-	idEncoded = idEncoded[:binary.PutUvarint(idEncoded, id)]
-
-	if len(idEncoded) == 0 {
-		return nil, fmt.Errorf("failed encoding id = %v", id)
-	}
-	return idEncoded, nil
 }
 
 func adaptSnapshot(info snapshots.Info) filters.Adaptor {

@@ -18,6 +18,7 @@ package manager
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -401,11 +402,7 @@ func TestActivateStaleIncomplete(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		idb, err := encodeID(staleMID)
-		if err != nil {
-			return err
-		}
-		return bkt.Put(bucketKeyID, idb)
+		return bkt.Put(bucketKeyID, binary.AppendUvarint(nil, staleMID))
 	})
 	require.NoError(t, err)
 

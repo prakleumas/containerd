@@ -222,12 +222,7 @@ func (m *DB) Init(ctx context.Context) error {
 			return err
 		}
 
-		versionEncoded, err := encodeInt(dbVersion)
-		if err != nil {
-			return err
-		}
-
-		return bkt.Put(bucketKeyDBVersion, versionEncoded)
+		return bkt.Put(bucketKeyDBVersion, binary.AppendVarint(nil, dbVersion))
 	})
 	if err == errSkip {
 		err = nil

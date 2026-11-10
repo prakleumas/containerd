@@ -235,11 +235,7 @@ func (mm *mountManager) Activate(ctx context.Context, name string, mounts []moun
 			return err
 		}
 
-		idb, err := encodeID(mid)
-		if err != nil {
-			return err
-		}
-		if err = bkt.Put(bucketKeyID, idb); err != nil {
+		if err = bkt.Put(bucketKeyID, binary.AppendUvarint(nil, mid)); err != nil {
 			return err
 		}
 
@@ -509,19 +505,6 @@ func (mm *mountManager) Activate(ctx context.Context, name string, mounts []moun
 	}
 
 	return
-}
-
-func encodeID(id uint64) ([]byte, error) {
-	var (
-		buf       [binary.MaxVarintLen64]byte
-		idEncoded = buf[:]
-	)
-	idEncoded = idEncoded[:binary.PutUvarint(idEncoded, id)]
-
-	if len(idEncoded) == 0 {
-		return nil, fmt.Errorf("failed encoding id = %v", id)
-	}
-	return idEncoded, nil
 }
 
 func readID(bkt *bolt.Bucket) uint64 {

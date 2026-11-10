@@ -703,18 +703,13 @@ func (nw *namespacedWriter) commit(ctx context.Context, tx *bolt.Tx, size int64,
 
 	commitTime := time.Now().UTC()
 
-	sizeEncoded, err := encodeInt(size)
-	if err != nil {
-		return "", 0, err
-	}
-
 	if err := boltutil.WriteTimestamps(bkt, commitTime, commitTime); err != nil {
 		return "", 0, err
 	}
 	if err := boltutil.WriteLabels(bkt, base.Labels); err != nil {
 		return "", 0, err
 	}
-	return actual, size, bkt.Put(bucketKeySize, sizeEncoded)
+	return actual, size, bkt.Put(bucketKeySize, binary.AppendVarint(nil, size))
 }
 
 func (nw *namespacedWriter) Status() (st content.Status, err error) {
@@ -813,12 +808,7 @@ func writeInfo(info *content.Info, bkt *bolt.Bucket) error {
 	}
 
 	// Write size
-	sizeEncoded, err := encodeInt(info.Size)
-	if err != nil {
-		return err
-	}
-
-	return bkt.Put(bucketKeySize, sizeEncoded)
+	return bkt.Put(bucketKeySize, binary.AppendVarint(nil, info.Size))
 }
 
 func readExpireAt(bkt *bolt.Bucket) (*time.Time, error) {
