@@ -205,12 +205,17 @@ func (o *snapshotter) Stat(ctx context.Context, key string) (info snapshots.Info
 	}
 
 	if o.upperdirLabel {
-		if info.Labels == nil {
-			info.Labels = make(map[string]string)
-		}
-		info.Labels[upperdirKey] = o.upperPath(id)
+		o.labelUpper(&info, id)
 	}
 	return info, nil
+}
+
+// labelUpper sets the upperdir label of info to the upperdir of snapshot id.
+func (o *snapshotter) labelUpper(info *snapshots.Info, id string) {
+	if info.Labels == nil {
+		info.Labels = make(map[string]string)
+	}
+	info.Labels[upperdirKey] = o.upperPath(id)
 }
 
 func (o *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpaths ...string) (newInfo snapshots.Info, err error) {
@@ -225,10 +230,7 @@ func (o *snapshotter) Update(ctx context.Context, info snapshots.Info, fieldpath
 			if err != nil {
 				return err
 			}
-			if newInfo.Labels == nil {
-				newInfo.Labels = make(map[string]string)
-			}
-			newInfo.Labels[upperdirKey] = o.upperPath(id)
+			o.labelUpper(&newInfo, id)
 		}
 		return nil
 	})
@@ -360,10 +362,7 @@ func (o *snapshotter) Walk(ctx context.Context, fn snapshots.WalkFunc, fs ...str
 				if err != nil {
 					return err
 				}
-				if info.Labels == nil {
-					info.Labels = make(map[string]string)
-				}
-				info.Labels[upperdirKey] = o.upperPath(id)
+				o.labelUpper(&info, id)
 				return fn(ctx, info)
 			}, fs...)
 		}
