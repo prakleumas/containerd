@@ -38,14 +38,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var (
-	enabled     bool
-	enabledOnce sync.Once
-)
-
 // isEnabled returns whether the kernel has been configured to support seccomp
 // (including the check for CONFIG_SECCOMP_FILTER kernel option).
-func isEnabled() bool {
+var isEnabled = sync.OnceValue(func() bool {
 	// Excerpts from prctl(2), section ERRORS:
 	//
 	// EACCES
@@ -72,9 +67,5 @@ func isEnabled() bool {
 	// EFAULT). IOW, EINVAL means "seccomp not supported", any other error
 	// means it is supported.
 
-	enabledOnce.Do(func() {
-		enabled = unix.Prctl(unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER, 0, 0, 0) != unix.EINVAL
-	})
-
-	return enabled
-}
+	return unix.Prctl(unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER, 0, 0, 0) != unix.EINVAL
+})
