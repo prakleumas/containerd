@@ -17,10 +17,13 @@
 package server
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	sandboxstore "github.com/containerd/containerd/v2/internal/cri/store/sandbox"
@@ -86,7 +89,7 @@ func TestToCRISandbox(t *testing.T) {
 	}
 }
 
-func TestFilterSandboxes(t *testing.T) {
+func TestFilterAndStreamPodSandboxes(t *testing.T) {
 	c := newTestCRIService()
 	sandboxes := []sandboxstore.Sandbox{
 		sandboxstore.NewSandbox(
@@ -216,8 +219,23 @@ func TestFilterSandboxes(t *testing.T) {
 		},
 	} {
 		t.Run(test.desc, func(t *testing.T) {
-			filtered := c.filterCRISandboxes(testSandboxes, test.filter)
-			assert.Equal(t, test.expect, filtered, test.desc)
+			// Each call gets its own filter, because the server rewrites a
+			// truncated ID in the filter to the full ID.
+			t.Run("filter", func(t *testing.T) {
+				filtered := c.filterCRISandboxes(testSandboxes, proto.CloneOf(test.filter))
+				assert.Equal(t, test.expect, filtered, "filterCRISandboxes(%v)", test.filter)
+			})
+			t.Run("stream", func(t *testing.T) {
+				stream := newFakeStreamServer[runtime.StreamPodSandboxesResponse](context.Background())
+				err := c.StreamPodSandboxes(&runtime.StreamPodSandboxesRequest{Filter: proto.CloneOf(test.filter)}, stream)
+				require.NoError(t, err, "StreamPodSandboxes(%v)", test.filter)
+
+				var sandboxes []*runtime.PodSandbox
+				for _, resp := range stream.sent {
+					sandboxes = append(sandboxes, resp.PodSandboxes...)
+				}
+				assert.ElementsMatch(t, test.expect, sandboxes, "StreamPodSandboxes(%v)", test.filter)
+			})
 		})
 	}
 }

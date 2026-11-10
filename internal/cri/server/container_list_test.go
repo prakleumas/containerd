@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
 	containerstore "github.com/containerd/containerd/v2/internal/cri/store/container"
@@ -178,7 +179,7 @@ func (c containerForTest) toContainer() (containerstore.Container, error) {
 	)
 }
 
-func TestListContainers(t *testing.T) {
+func TestListAndStreamContainers(t *testing.T) {
 	c := newTestCRIService()
 	sandboxesInStore := []sandboxstore.Sandbox{
 		sandboxstore.NewSandbox(
@@ -352,14 +353,26 @@ func TestListContainers(t *testing.T) {
 		},
 	} {
 		t.Run(testdata.desc, func(t *testing.T) {
-			resp, err := c.ListContainers(context.Background(), &runtime.ListContainersRequest{Filter: testdata.filter})
-			assert.NoError(t, err)
-			require.NotNil(t, resp)
-			containers := resp.GetContainers()
-			assert.Len(t, containers, len(testdata.expect))
-			for _, cntr := range testdata.expect {
-				assert.Contains(t, containers, cntr)
-			}
+			// Each call gets its own filter, because the server rewrites a
+			// truncated ID in the filter to the full ID.
+			t.Run("list", func(t *testing.T) {
+				resp, err := c.ListContainers(context.Background(), &runtime.ListContainersRequest{Filter: proto.CloneOf(testdata.filter)})
+				require.NoError(t, err, "ListContainers(%v)", testdata.filter)
+				require.NotNil(t, resp, "ListContainers(%v)", testdata.filter)
+				assert.ElementsMatch(t, testdata.expect, resp.GetContainers(), "ListContainers(%v)", testdata.filter)
+			})
+			t.Run("stream", func(t *testing.T) {
+				stream := newFakeStreamServer[runtime.StreamContainersResponse](context.Background())
+				err := c.StreamContainers(&runtime.StreamContainersRequest{Filter: proto.CloneOf(testdata.filter)}, stream)
+				require.NoError(t, err, "StreamContainers(%v)", testdata.filter)
+				require.NotEmpty(t, stream.sent, "StreamContainers(%v)", testdata.filter)
+
+				var containers []*runtime.Container
+				for _, resp := range stream.sent {
+					containers = append(containers, resp.Containers...)
+				}
+				assert.ElementsMatch(t, testdata.expect, containers, "StreamContainers(%v)", testdata.filter)
+			})
 		})
 	}
 }

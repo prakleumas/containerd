@@ -28,7 +28,7 @@ import (
 	imagestore "github.com/containerd/containerd/v2/internal/cri/store/image"
 )
 
-func TestListImages(t *testing.T) {
+func TestListAndStreamImages(t *testing.T) {
 	_, c := newTestCRIService()
 	imagesInStore := []imagestore.Image{
 		{
@@ -102,12 +102,22 @@ func TestListImages(t *testing.T) {
 	c.imageStore, err = imagestore.NewFakeStore(imagesInStore)
 	assert.NoError(t, err)
 
-	resp, err := c.ListImages(context.Background(), &runtime.ListImagesRequest{})
-	assert.NoError(t, err)
-	require.NotNil(t, resp)
-	images := resp.GetImages()
-	assert.Len(t, images, len(expect))
-	for _, i := range expect {
-		assert.Contains(t, images, i)
-	}
+	t.Run("list", func(t *testing.T) {
+		resp, err := c.ListImages(context.Background(), &runtime.ListImagesRequest{})
+		require.NoError(t, err, "ListImages")
+		require.NotNil(t, resp, "ListImages")
+		assert.ElementsMatch(t, expect, resp.GetImages(), "ListImages")
+	})
+	t.Run("stream", func(t *testing.T) {
+		stream := newFakeStreamServer[runtime.StreamImagesResponse](context.Background())
+		err := c.StreamImages(&runtime.StreamImagesRequest{}, stream)
+		require.NoError(t, err, "StreamImages")
+		require.NotEmpty(t, stream.sent, "StreamImages")
+
+		var images []*runtime.Image
+		for _, resp := range stream.sent {
+			images = append(images, resp.Images...)
+		}
+		assert.ElementsMatch(t, expect, images, "StreamImages")
+	})
 }
