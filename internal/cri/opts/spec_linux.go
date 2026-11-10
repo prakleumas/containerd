@@ -40,99 +40,68 @@ import (
 
 // Linux dependent OCI spec opts.
 
-var (
-	swapControllerAvailability     bool
-	swapControllerAvailabilityOnce sync.Once
-)
+var swapControllerAvailable = sync.OnceValue(func() bool {
+	const warn = "Failed to detect the availability of the swap controller, assuming not available"
+	p := "/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes"
+	if cgroups.Mode() == cgroups.Unified {
+		// memory.swap.max does not exist in the cgroup root, so we check /sys/fs/cgroup/<SELF>/memory.swap.max
+		_, unified, err := cgroups.ParseCgroupFileUnified("/proc/self/cgroup")
+		if err != nil {
+			err = fmt.Errorf("failed to parse /proc/self/cgroup: %w", err)
+			log.L.WithError(err).Warn(warn)
+			return false
+		}
+		p = filepath.Join("/sys/fs/cgroup", unified, "memory.swap.max")
+	}
+	if _, err := os.Stat(p); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			log.L.WithError(err).Warn(warn)
+		}
+		return false
+	}
+	return true
+})
 
 // SwapControllerAvailable returns true if the swap controller is available
 func SwapControllerAvailable() bool {
-	swapControllerAvailabilityOnce.Do(func() {
-		const warn = "Failed to detect the availability of the swap controller, assuming not available"
-		p := "/sys/fs/cgroup/memory/memory.memsw.limit_in_bytes"
-		if cgroups.Mode() == cgroups.Unified {
-			// memory.swap.max does not exist in the cgroup root, so we check /sys/fs/cgroup/<SELF>/memory.swap.max
-			_, unified, err := cgroups.ParseCgroupFileUnified("/proc/self/cgroup")
-			if err != nil {
-				err = fmt.Errorf("failed to parse /proc/self/cgroup: %w", err)
-				log.L.WithError(err).Warn(warn)
-				return
-			}
-			p = filepath.Join("/sys/fs/cgroup", unified, "memory.swap.max")
-		}
-		if _, err := os.Stat(p); err != nil {
-			if !errors.Is(err, os.ErrNotExist) {
-				log.L.WithError(err).Warn(warn)
-			}
-			return
-		}
-		swapControllerAvailability = true
-	})
-	return swapControllerAvailability
+	return swapControllerAvailable()
 }
 
-var (
-	supportsHugetlbOnce sync.Once
-	supportsHugetlb     bool
-)
-
-func isHugetlbControllerPresent() bool {
-	supportsHugetlbOnce.Do(func() {
-		supportsHugetlb = false
-		if IsCgroup2UnifiedMode() {
-			supportsHugetlb = cgroupv2HasHugetlb()
-		} else {
-			supportsHugetlb = cgroupv1HasHugetlb()
-		}
-	})
-	return supportsHugetlb
-}
-
-var (
-	_cgroupv1HasHugetlbOnce sync.Once
-	_cgroupv1HasHugetlb     bool
-	_cgroupv2HasHugetlbOnce sync.Once
-	_cgroupv2HasHugetlb     bool
-	isUnifiedOnce           sync.Once
-	isUnified               bool
-)
+var isHugetlbControllerPresent = sync.OnceValue(func() bool {
+	if IsCgroup2UnifiedMode() {
+		return cgroupv2HasHugetlb()
+	}
+	return cgroupv1HasHugetlb()
+})
 
 // cgroupv1HasHugetlb returns whether the hugetlb controller is present on
 // cgroup v1.
-func cgroupv1HasHugetlb() bool {
-	_cgroupv1HasHugetlbOnce.Do(func() {
-		if _, err := os.ReadDir("/sys/fs/cgroup/hugetlb"); err != nil {
-			_cgroupv1HasHugetlb = false
-		} else {
-			_cgroupv1HasHugetlb = true
-		}
-	})
-	return _cgroupv1HasHugetlb
-}
+var cgroupv1HasHugetlb = sync.OnceValue(func() bool {
+	_, err := os.ReadDir("/sys/fs/cgroup/hugetlb")
+	return err == nil
+})
 
 // cgroupv2HasHugetlb returns whether the hugetlb controller is present on
 // cgroup v2.
-func cgroupv2HasHugetlb() bool {
-	_cgroupv2HasHugetlbOnce.Do(func() {
-		controllers, err := os.ReadFile("/sys/fs/cgroup/cgroup.controllers")
-		if err != nil {
-			return
-		}
-		_cgroupv2HasHugetlb = strings.Contains(string(controllers), "hugetlb")
-	})
-	return _cgroupv2HasHugetlb
-}
+var cgroupv2HasHugetlb = sync.OnceValue(func() bool {
+	controllers, err := os.ReadFile("/sys/fs/cgroup/cgroup.controllers")
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(controllers), "hugetlb")
+})
+
+var isCgroup2UnifiedMode = sync.OnceValue(func() bool {
+	var st syscall.Statfs_t
+	if err := syscall.Statfs("/sys/fs/cgroup", &st); err != nil {
+		panic("cannot statfs cgroup root")
+	}
+	return st.Type == unix.CGROUP2_SUPER_MAGIC
+})
 
 // IsCgroup2UnifiedMode returns whether we are running in cgroup v2 unified mode.
 func IsCgroup2UnifiedMode() bool {
-	isUnifiedOnce.Do(func() {
-		var st syscall.Statfs_t
-		if err := syscall.Statfs("/sys/fs/cgroup", &st); err != nil {
-			panic("cannot statfs cgroup root")
-		}
-		isUnified = st.Type == unix.CGROUP2_SUPER_MAGIC
-	})
-	return isUnified
+	return isCgroup2UnifiedMode()
 }
 
 // WithCDI updates OCI spec with CDI content

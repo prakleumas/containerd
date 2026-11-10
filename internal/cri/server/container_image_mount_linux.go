@@ -32,23 +32,19 @@ import (
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 )
 
-var (
-	volatileSupported     bool
-	volatileSupportedOnce sync.Once
-)
+var volatileSupported = sync.OnceValue(func() bool {
+	ok, _ := kernel.GreaterEqualThan(
+		kernel.KernelVersion{
+			Kernel: 5, Major: 10,
+		},
+	)
+	return ok
+})
 
 // addVolatileOptionOnImageVolumeMount adds volatile option if applicable. It
 // can avoid syncfs when we clean it up.
 func addVolatileOptionOnImageVolumeMount(mounts []mount.Mount) []mount.Mount {
-	volatileSupportedOnce.Do(func() {
-		volatileSupported, _ = kernel.GreaterEqualThan(
-			kernel.KernelVersion{
-				Kernel: 5, Major: 10,
-			},
-		)
-	})
-
-	if !volatileSupported {
+	if !volatileSupported() {
 		return mounts
 	}
 

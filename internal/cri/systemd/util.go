@@ -37,22 +37,15 @@ import (
 	"sync"
 )
 
-var (
-	runningSystemd bool
-	detectSystemd  sync.Once
-)
+var runningSystemd = sync.OnceValue(func() bool {
+	fi, err := os.Lstat("/run/systemd/system")
+	return err == nil && fi.IsDir()
+})
 
 // IsRunningSystemd checks whether the host was booted with systemd as its init
 // system. This functions similarly to systemd's `sd_booted(3)`: internally, it
 // checks whether /run/systemd/system/ exists and is a directory.
 // https://github.com/coreos/go-systemd/blob/d843340ab4bd3815fda02e648f9b09ae2dc722a7/util/util.go#L68-L78
 func IsRunningSystemd() bool {
-	detectSystemd.Do(func() {
-		fi, err := os.Lstat("/run/systemd/system")
-		if err != nil {
-			return
-		}
-		runningSystemd = fi.IsDir()
-	})
-	return runningSystemd
+	return runningSystemd()
 }
