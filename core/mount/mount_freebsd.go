@@ -16,14 +16,6 @@
 
 package mount
 
-import (
-	"errors"
-	"fmt"
-	"os/exec"
-
-	"golang.org/x/sys/unix"
-)
-
 // Mount to the provided target.
 //
 // The "syscall" and "golang.org/x/sys/unix" packages do not define a Mount
@@ -40,33 +32,5 @@ func (m *Mount) mount(target string) error {
 	args = append(args, "-t", m.Type)
 	args = append(args, m.Source, target)
 
-	infoBeforeMount, err := Lookup(target)
-	if err != nil {
-		return err
-	}
-
-	// cmd.CombinedOutput() may intermittently return ECHILD because of our signal handling in shim.
-	// See #4387 and wait(2).
-	const retriesOnECHILD = 10
-	for range retriesOnECHILD {
-		cmd := exec.Command("mount", args...)
-		out, err := cmd.CombinedOutput()
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, unix.ECHILD) {
-			return fmt.Errorf("mount [%v] failed: %q: %w", args, string(out), err)
-		}
-		// We got ECHILD, we are not sure whether the mount was successful.
-		// If the mount ID has changed, we are sure we got some new mount, but still not sure it is fully completed.
-		// So we attempt to unmount the new mount before retrying.
-		infoAfterMount, err := Lookup(target)
-		if err != nil {
-			return err
-		}
-		if infoAfterMount.ID != infoBeforeMount.ID {
-			_ = unmount(target, 0)
-		}
-	}
-	return fmt.Errorf("mount [%v] failed with ECHILD (retried %d times)", args, retriesOnECHILD)
+	return runMountHelper("mount", args, target)
 }
