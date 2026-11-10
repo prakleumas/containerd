@@ -23,11 +23,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"sync"
 	"testing"
 
 	"github.com/containerd/containerd/v2/core/content"
 	"github.com/containerd/containerd/v2/core/images"
+	"github.com/containerd/containerd/v2/core/images/imagetest"
 	"github.com/containerd/containerd/v2/plugins/content/local"
 	"github.com/containerd/errdefs"
 	"github.com/opencontainers/go-digest"
@@ -107,11 +107,7 @@ func TestSkipNonDistributableBlobs(t *testing.T) {
 		t.Fatalf("unexpected digest returned: %s", out[0].Digest)
 	}
 
-	dir := t.TempDir()
-	cs, err := local.NewLabeledStore(dir, newMemoryLabelStore())
-	if err != nil {
-		t.Fatal(err)
-	}
+	cs := imagetest.NewContentStore(ctx, t)
 
 	write := func(i any, ref string) digest.Digest {
 		t.Helper()
@@ -173,52 +169,6 @@ func TestSkipNonDistributableBlobs(t *testing.T) {
 	if out[1].Digest != manifest.Layers[0].Digest {
 		t.Fatalf("unexpected digest returned: %v", out[1])
 	}
-}
-
-type memoryLabelStore struct {
-	l      sync.Mutex
-	labels map[digest.Digest]map[string]string
-}
-
-func newMemoryLabelStore() local.LabelStore {
-	return &memoryLabelStore{
-		labels: map[digest.Digest]map[string]string{},
-	}
-}
-
-func (mls *memoryLabelStore) Get(d digest.Digest) (map[string]string, error) {
-	mls.l.Lock()
-	labels := mls.labels[d]
-	mls.l.Unlock()
-
-	return labels, nil
-}
-
-func (mls *memoryLabelStore) Set(d digest.Digest, labels map[string]string) error {
-	mls.l.Lock()
-	mls.labels[d] = labels
-	mls.l.Unlock()
-
-	return nil
-}
-
-func (mls *memoryLabelStore) Update(d digest.Digest, update map[string]string) (map[string]string, error) {
-	mls.l.Lock()
-	labels, ok := mls.labels[d]
-	if !ok {
-		labels = map[string]string{}
-	}
-	for k, v := range update {
-		if v == "" {
-			delete(labels, k)
-		} else {
-			labels[k] = v
-		}
-	}
-	mls.labels[d] = labels
-	mls.l.Unlock()
-
-	return labels, nil
 }
 
 func TestFetchSizeValidation(t *testing.T) {
