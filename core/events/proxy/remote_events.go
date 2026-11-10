@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/ttrpc"
 	"github.com/containerd/typeurl/v2"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/containerd/containerd/v2/core/events"
 	"github.com/containerd/containerd/v2/pkg/protobuf"
@@ -42,19 +43,19 @@ type EventService interface {
 func NewRemoteEvents(client any) EventService {
 	switch c := client.(type) {
 	case api.EventsClient:
-		return &grpcEventsProxy{
-			client: c,
+		return &eventsProxy{
+			client: convertClient{c},
 		}
 	case api.TTRPCEventsClient:
-		return &ttrpcEventsProxy{
+		return &eventsProxy{
 			client: c,
 		}
 	case grpc.ClientConnInterface:
-		return &grpcEventsProxy{
-			client: api.NewEventsClient(c),
+		return &eventsProxy{
+			client: convertClient{api.NewEventsClient(c)},
 		}
 	case *ttrpc.Client:
-		return &ttrpcEventsProxy{
+		return &eventsProxy{
 			client: api.NewTTRPCEventsClient(c),
 		}
 	default:
@@ -62,95 +63,11 @@ func NewRemoteEvents(client any) EventService {
 	}
 }
 
-type grpcEventsProxy struct {
-	client api.EventsClient
-}
-
-func (p *grpcEventsProxy) Publish(ctx context.Context, topic string, event events.Event) error {
-	evt, err := typeurl.MarshalAny(event)
-	if err != nil {
-		return err
-	}
-	req := &api.PublishRequest{
-		Topic: topic,
-		Event: typeurl.MarshalProto(evt),
-	}
-	if _, err := p.client.Publish(ctx, req); err != nil {
-		return errgrpc.ToNative(err)
-	}
-	return nil
-}
-
-func (p *grpcEventsProxy) Forward(ctx context.Context, envelope *events.Envelope) error {
-	req := &api.ForwardRequest{
-		Envelope: &types.Envelope{
-			Timestamp: protobuf.ToTimestamp(envelope.Timestamp),
-			Namespace: envelope.Namespace,
-			Topic:     envelope.Topic,
-			Event:     typeurl.MarshalProto(envelope.Event),
-		},
-	}
-	if _, err := p.client.Forward(ctx, req); err != nil {
-		return errgrpc.ToNative(err)
-	}
-	return nil
-}
-
-func (p *grpcEventsProxy) Subscribe(ctx context.Context, filters ...string) (ch <-chan *events.Envelope, errs <-chan error) {
-	var (
-		evq  = make(chan *events.Envelope)
-		errq = make(chan error, 1)
-	)
-
-	errs = errq
-	ch = evq
-
-	session, err := p.client.Subscribe(ctx, &api.SubscribeRequest{
-		Filters: filters,
-	})
-	if err != nil {
-		errq <- errgrpc.ToNative(err)
-		close(errq)
-		return
-	}
-
-	go func() {
-		defer close(errq)
-
-		for {
-			ev, err := session.Recv()
-			if err != nil {
-				if err != io.EOF {
-					err = errgrpc.ToNative(err)
-				}
-				errq <- err
-				return
-			}
-
-			select {
-			case evq <- &events.Envelope{
-				Timestamp: protobuf.FromTimestamp(ev.Timestamp),
-				Namespace: ev.Namespace,
-				Topic:     ev.Topic,
-				Event:     ev.Event,
-			}:
-			case <-ctx.Done():
-				if cerr := ctx.Err(); cerr != context.Canceled {
-					errq <- cerr
-				}
-				return
-			}
-		}
-	}()
-
-	return ch, errs
-}
-
-type ttrpcEventsProxy struct {
+type eventsProxy struct {
 	client api.TTRPCEventsClient
 }
 
-func (p *ttrpcEventsProxy) Publish(ctx context.Context, topic string, event events.Event) error {
+func (p *eventsProxy) Publish(ctx context.Context, topic string, event events.Event) error {
 	evt, err := typeurl.MarshalAny(event)
 	if err != nil {
 		return err
@@ -165,7 +82,7 @@ func (p *ttrpcEventsProxy) Publish(ctx context.Context, topic string, event even
 	return nil
 }
 
-func (p *ttrpcEventsProxy) Forward(ctx context.Context, envelope *events.Envelope) error {
+func (p *eventsProxy) Forward(ctx context.Context, envelope *events.Envelope) error {
 	req := &api.ForwardRequest{
 		Envelope: &types.Envelope{
 			Timestamp: protobuf.ToTimestamp(envelope.Timestamp),
@@ -180,7 +97,7 @@ func (p *ttrpcEventsProxy) Forward(ctx context.Context, envelope *events.Envelop
 	return nil
 }
 
-func (p *ttrpcEventsProxy) Subscribe(ctx context.Context, filters ...string) (ch <-chan *events.Envelope, errs <-chan error) {
+func (p *eventsProxy) Subscribe(ctx context.Context, filters ...string) (ch <-chan *events.Envelope, errs <-chan error) {
 	var (
 		evq  = make(chan *events.Envelope)
 		errq = make(chan error, 1)
@@ -228,4 +145,20 @@ func (p *ttrpcEventsProxy) Subscribe(ctx context.Context, filters ...string) (ch
 	}()
 
 	return ch, errs
+}
+
+type convertClient struct {
+	api.EventsClient
+}
+
+func (cc convertClient) Publish(ctx context.Context, req *api.PublishRequest) (*emptypb.Empty, error) {
+	return cc.EventsClient.Publish(ctx, req)
+}
+
+func (cc convertClient) Forward(ctx context.Context, req *api.ForwardRequest) (*emptypb.Empty, error) {
+	return cc.EventsClient.Forward(ctx, req)
+}
+
+func (cc convertClient) Subscribe(ctx context.Context, req *api.SubscribeRequest) (api.TTRPCEvents_SubscribeClient, error) {
+	return cc.EventsClient.Subscribe(ctx, req)
 }
