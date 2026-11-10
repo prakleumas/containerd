@@ -980,6 +980,47 @@ func TestFetcherBlobEndpointForwardsResolverHeaders(t *testing.T) {
 	}
 }
 
+func TestFetchByDigestFallsBackToManifests(t *testing.T) {
+	body := []byte("manifest")
+	dgst := digest.FromBytes(body)
+
+	s := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/manifests/"+dgst.String()) {
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+		rw.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		if r.Method == http.MethodGet {
+			_, _ = rw.Write(body)
+		}
+	}))
+	defer s.Close()
+
+	u, err := url.Parse(s.URL)
+	require.NoError(t, err)
+	refspec, err := reference.Parse("example.com/library/test:latest")
+	require.NoError(t, err)
+
+	f := dockerFetcher{&dockerBase{
+		refspec:    refspec,
+		repository: "library/test",
+		hosts: []RegistryHost{{
+			Client:       s.Client(),
+			Host:         u.Host,
+			Scheme:       u.Scheme,
+			Capabilities: HostCapabilityPull,
+		}},
+	}}
+
+	rc, desc, err := f.FetchByDigest(context.Background(), dgst)
+	require.NoError(t, err)
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	assert.Equal(t, body, got)
+	assert.Equal(t, int64(len(body)), desc.Size)
+}
+
 func TestContentEncoding(t *testing.T) {
 	t.Parallel()
 

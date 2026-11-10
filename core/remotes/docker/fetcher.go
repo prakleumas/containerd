@@ -326,35 +326,15 @@ func (r dockerFetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.R
 			}
 		}
 
-		// Try manifests endpoints for manifests types
+		// Try manifests endpoints for manifests types, otherwise use blobs endpoints
+		endpoint := "blobs"
 		if images.IsManifestType(desc.MediaType) || images.IsIndexType(desc.MediaType) {
-
-			var firstErr error
-			for i, host := range r.hosts {
-				req := r.request(host, http.MethodGet, "manifests", desc.Digest.String())
-				if err := req.addNamespace(r.refspec.Hostname()); err != nil {
-					return nil, err
-				}
-
-				rc, _, err := r.open(ctx, req, desc.MediaType, offset, i == len(r.hosts)-1)
-				if err != nil {
-					// Store the error for referencing later
-					if firstErr == nil {
-						firstErr = err
-					}
-					continue // try another host
-				}
-
-				return rc, nil
-			}
-
-			return nil, firstErr
+			endpoint = "manifests"
 		}
 
-		// Finally use blobs endpoints
 		var firstErr error
 		for i, host := range r.hosts {
-			req := r.request(host, http.MethodGet, "blobs", desc.Digest.String())
+			req := r.request(host, http.MethodGet, endpoint, desc.Digest.String())
 			if err := req.addNamespace(r.refspec.Hostname()); err != nil {
 				return nil, err
 			}
@@ -371,7 +351,7 @@ func (r dockerFetcher) Fetch(ctx context.Context, desc ocispec.Descriptor) (io.R
 			return rc, nil
 		}
 
-		if errdefs.IsNotFound(firstErr) {
+		if endpoint == "blobs" && errdefs.IsNotFound(firstErr) {
 			firstErr = fmt.Errorf("could not fetch content descriptor %v (%v) from remote: %w",
 				desc.Digest, desc.MediaType, errdefs.ErrNotFound,
 			)
@@ -443,21 +423,10 @@ func (r dockerFetcher) FetchByDigest(ctx context.Context, dgst digest.Digest, op
 		firstErr error
 	)
 
-	for i, host := range r.hosts {
-		getReq, sz, err = r.createGetReq(ctx, host, i == len(r.hosts)-1, config.Mediatype, "blobs", dgst.String())
-		if err == nil {
-			break
-		}
-		// Store the error for referencing later
-		if firstErr == nil {
-			firstErr = err
-		}
-	}
-
-	if getReq == nil {
-		// Fall back to the "manifests" endpoint
+	// Try the "blobs" endpoint, then fall back to the "manifests" endpoint
+	for _, endpoint := range []string{"blobs", "manifests"} {
 		for i, host := range r.hosts {
-			getReq, sz, err = r.createGetReq(ctx, host, i == len(r.hosts)-1, config.Mediatype, "manifests", dgst.String())
+			getReq, sz, err = r.createGetReq(ctx, host, i == len(r.hosts)-1, config.Mediatype, endpoint, dgst.String())
 			if err == nil {
 				break
 			}
@@ -465,6 +434,9 @@ func (r dockerFetcher) FetchByDigest(ctx context.Context, dgst digest.Digest, op
 			if firstErr == nil {
 				firstErr = err
 			}
+		}
+		if getReq != nil {
+			break
 		}
 	}
 
