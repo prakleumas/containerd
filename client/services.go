@@ -181,27 +181,22 @@ func WithMountManager(mm mount.Manager) ServicesOpt {
 	}
 }
 
+// svcOpt adapts a typed ServicesOpt constructor to accept a plugin instance.
+func svcOpt[T any](with func(T) ServicesOpt) func(any) ServicesOpt {
+	return func(i any) ServicesOpt { return with(i.(T)) }
+}
+
 // WithInMemoryServices is suitable for cases when there is need to use containerd's client from
 // another (in-memory) containerd plugin (such as CRI).
 func WithInMemoryServices(ic *plugin.InitContext) Opt {
 	return func(c *clientOpts) error {
 		var opts []ServicesOpt
 		for t, fn := range map[plugin.Type]func(any) ServicesOpt{
-			plugins.EventPlugin: func(i any) ServicesOpt {
-				return WithEventService(i.(EventService))
-			},
-			plugins.LeasePlugin: func(i any) ServicesOpt {
-				return WithLeasesService(i.(leases.Manager))
-			},
-			plugins.SandboxStorePlugin: func(i any) ServicesOpt {
-				return WithSandboxStore(i.(sandbox.Store))
-			},
-			plugins.TransferPlugin: func(i any) ServicesOpt {
-				return WithTransferService(i.(transfer.Transferrer))
-			},
-			plugins.MountManagerPlugin: func(i any) ServicesOpt {
-				return WithMountManager(i.(mount.Manager))
-			},
+			plugins.EventPlugin:        svcOpt(WithEventService),
+			plugins.LeasePlugin:        svcOpt(WithLeasesService),
+			plugins.SandboxStorePlugin: svcOpt(WithSandboxStore),
+			plugins.TransferPlugin:     svcOpt(WithTransferService),
+			plugins.MountManagerPlugin: svcOpt(WithMountManager),
 		} {
 			i, err := ic.GetSingle(t)
 			if err != nil {
@@ -215,30 +210,14 @@ func WithInMemoryServices(ic *plugin.InitContext) Opt {
 			return fmt.Errorf("failed to get service plugin: %w", err)
 		}
 		for s, fn := range map[string]func(any) ServicesOpt{
-			srv.ContentService: func(s any) ServicesOpt {
-				return WithContentStore(s.(content.Store))
-			},
-			srv.ImagesService: func(s any) ServicesOpt {
-				return WithImageClient(s.(imagesapi.ImagesClient))
-			},
-			srv.SnapshotsService: func(s any) ServicesOpt {
-				return WithSnapshotters(s.(map[string]snapshots.Snapshotter))
-			},
-			srv.ContainersService: func(s any) ServicesOpt {
-				return WithContainerClient(s.(containersapi.ContainersClient))
-			},
-			srv.TasksService: func(s any) ServicesOpt {
-				return WithTaskClient(s.(tasks.TasksClient))
-			},
-			srv.DiffService: func(s any) ServicesOpt {
-				return WithDiffClient(s.(diff.DiffClient))
-			},
-			srv.NamespacesService: func(s any) ServicesOpt {
-				return WithNamespaceClient(s.(namespacesapi.NamespacesClient))
-			},
-			srv.IntrospectionService: func(s any) ServicesOpt {
-				return WithIntrospectionService(s.(introspection.Service))
-			},
+			srv.ContentService:       svcOpt(WithContentStore),
+			srv.ImagesService:        svcOpt(WithImageClient),
+			srv.SnapshotsService:     svcOpt(WithSnapshotters),
+			srv.ContainersService:    svcOpt(WithContainerClient),
+			srv.TasksService:         svcOpt(WithTaskClient),
+			srv.DiffService:          svcOpt(WithDiffClient),
+			srv.NamespacesService:    svcOpt(WithNamespaceClient),
+			srv.IntrospectionService: svcOpt(WithIntrospectionService),
 		} {
 			i := plugins[s]
 			if i == nil {
