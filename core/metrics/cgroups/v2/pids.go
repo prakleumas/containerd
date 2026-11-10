@@ -25,36 +25,23 @@ import (
 )
 
 var pidMetrics = []*metric{
-	{
-		name: "pids",
-		help: "The limit to the number of pids allowed (cgroup v2)",
-		unit: metrics.Unit("limit"),
+	pidsGauge("pids", "The limit to the number of pids allowed (cgroup v2)", metrics.Unit("limit"), (*v2.PidsStat).GetLimit),
+	pidsGauge("pids", "The current number of pids (cgroup v2)", metrics.Unit("current"), (*v2.PidsStat).GetCurrent),
+}
+
+// pidsGauge returns a gauge that reports the value get reads from the pids
+// stats, and no value when the pids stats are absent.
+func pidsGauge(name, help string, unit metrics.Unit, get func(*v2.PidsStat) uint64) *metric {
+	return &metric{
+		name: name,
+		help: help,
+		unit: unit,
 		vt:   prometheus.GaugeValue,
 		getValues: func(stats *v2.Metrics) []value {
 			if stats.Pids == nil {
 				return nil
 			}
-			return []value{
-				{
-					v: float64(stats.Pids.Limit),
-				},
-			}
+			return []value{{v: float64(get(stats.Pids))}}
 		},
-	},
-	{
-		name: "pids",
-		help: "The current number of pids (cgroup v2)",
-		unit: metrics.Unit("current"),
-		vt:   prometheus.GaugeValue,
-		getValues: func(stats *v2.Metrics) []value {
-			if stats.Pids == nil {
-				return nil
-			}
-			return []value{
-				{
-					v: float64(stats.Pids.Current),
-				},
-			}
-		},
-	},
+	}
 }
