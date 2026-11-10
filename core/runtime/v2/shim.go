@@ -531,12 +531,8 @@ func (s *shim) Client() any {
 
 // Close closes the underlying client connection.
 func (s *shim) Close() error {
-	if ttrpcClient, ok := s.client.(*ttrpc.Client); ok {
-		return ttrpcClient.Close()
-	}
-
-	if grpcClient, ok := s.client.(*grpcConn); ok {
-		return grpcClient.Close()
+	if c, ok := s.client.(io.Closer); ok {
+		return c.Close()
 	}
 
 	return nil
@@ -545,22 +541,15 @@ func (s *shim) Close() error {
 func (s *shim) Delete(ctx context.Context) error {
 	var result []error
 
-	if ttrpcClient, ok := s.client.(*ttrpc.Client); ok {
-		if err := ttrpcClient.Close(); err != nil {
-			result = append(result, fmt.Errorf("failed to close ttrpc client: %w", err))
+	if c, ok := s.client.(interface {
+		io.Closer
+		UserOnCloseWait(context.Context) error
+	}); ok {
+		if err := c.Close(); err != nil {
+			result = append(result, fmt.Errorf("failed to close shim client: %w", err))
 		}
 
-		if err := ttrpcClient.UserOnCloseWait(ctx); err != nil {
-			result = append(result, fmt.Errorf("close wait error: %w", err))
-		}
-	}
-
-	if grpcClient, ok := s.client.(*grpcConn); ok {
-		if err := grpcClient.Close(); err != nil {
-			result = append(result, fmt.Errorf("failed to close grpc client: %w", err))
-		}
-
-		if err := grpcClient.UserOnCloseWait(ctx); err != nil {
+		if err := c.UserOnCloseWait(ctx); err != nil {
 			result = append(result, fmt.Errorf("close wait error: %w", err))
 		}
 	}
