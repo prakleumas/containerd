@@ -42,22 +42,8 @@ func TestCheckpointRestorePTY(t *testing.T) {
 	if !supportsCriu {
 		t.Skip("system does not have criu installed")
 	}
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
 		WithNewSpec(oci.WithImageConfig(image),
@@ -163,22 +149,8 @@ func TestCheckpointRestore(t *testing.T) {
 	if !supportsCriu {
 		t.Skip("system does not have criu installed")
 	}
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithProcessArgs("sleep", "10")))
 	if err != nil {
 		t.Fatal(err)
@@ -250,20 +222,8 @@ func TestCheckpointRestoreNewContainer(t *testing.T) {
 	if !supportsCriu {
 		t.Skip("system does not have criu installed")
 	}
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
+	ctx, client, image := setupImage(t)
 	id := t.Name()
-	ctx, cancel := testContext(t)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithProcessArgs("sleep", "5")))
 	if err != nil {
 		t.Fatal(err)
@@ -337,22 +297,8 @@ func TestCheckpointLeaveRunning(t *testing.T) {
 	if !supportsCriu {
 		t.Skip("system does not have criu installed")
 	}
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithProcessArgs("sleep", "100")))
 	if err != nil {
 		t.Fatal(err)
@@ -403,22 +349,8 @@ func TestCheckpointRestoreWithImagePath(t *testing.T) {
 		t.Skip("system does not have criu installed")
 	}
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name() + "-checkpoint"
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name() + "-checkpoint"
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithProcessArgs("top")))
 	if err != nil {
@@ -518,22 +450,8 @@ func TestCheckpointOnPauseStatus(t *testing.T) {
 	if !supportsCriu {
 		t.Skip("system does not have criu installed")
 	}
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithProcessArgs("sleep", "10")))
 	if err != nil {
 		t.Fatal(err)

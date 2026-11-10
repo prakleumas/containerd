@@ -69,22 +69,8 @@ var testUserNSImage = images.Get(images.VolumeOwnership)
 func TestTaskUpdate(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	limit := int64(32 * 1024 * 1024)
 	memory := func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 		s.Linux.Resources.Memory = &specs.LinuxMemory{
@@ -179,22 +165,8 @@ func TestTaskUpdate(t *testing.T) {
 
 func TestContainerRestartPolicyAlways(t *testing.T) {
 	t.Parallel()
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	var cOpts []NewContainerOpts
 
@@ -298,21 +270,8 @@ func TestShimInCgroup(t *testing.T) {
 
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-	var (
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithProcessArgs("sleep", "30")))
 	if err != nil {
 		t.Fatal(err)
@@ -381,23 +340,8 @@ func TestShimDoesNotLeakPipes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withProcessArgs("sleep", "30")))
 	if err != nil {
@@ -443,23 +387,8 @@ func TestShimDoesNotLeakPipes(t *testing.T) {
 }
 
 func TestShimDoesNotLeakSockets(t *testing.T) {
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withProcessArgs("sleep", "30")))
 	if err != nil {
@@ -515,23 +444,8 @@ func numPipes(pid int) (int, error) {
 }
 
 func TestDaemonReconnectsToShimIOPipesOnRestart(t *testing.T) {
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withProcessArgs("sleep", "30")))
 	if err != nil {
@@ -617,23 +531,8 @@ func getLogDirPath(runtimeVersion, id string) string {
 func TestContainerAttach(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withCat()))
 	if err != nil {
@@ -719,23 +618,8 @@ func TestContainerUser(t *testing.T) {
 }
 
 func testContainerUser(t *testing.T, userstr, expectedOutput string) {
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = strings.Replace(t.Name(), "/", "_", -1)
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := strings.Replace(t.Name(), "/", "_", -1)
 	direct, err := newDirectIO(ctx, false)
 	if err != nil {
 		t.Fatal(err)
@@ -785,23 +669,8 @@ func testContainerUser(t *testing.T, userstr, expectedOutput string) {
 func TestContainerAttachProcess(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withProcessArgs("sleep", "100")))
 	if err != nil {
@@ -900,23 +769,8 @@ func TestContainerAttachProcess(t *testing.T) {
 func TestContainerLoadUnexistingProcess(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withProcessArgs("sleep", "100")))
 	if err != nil {
@@ -964,23 +818,8 @@ func TestContainerLoadUnexistingProcess(t *testing.T) {
 func TestContainerUserID(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	direct, err := newDirectIO(ctx, false)
 	if err != nil {
 		t.Fatal(err)
@@ -1031,23 +870,8 @@ func TestContainerUserID(t *testing.T) {
 func TestContainerKillAll(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
@@ -1087,23 +911,8 @@ func TestContainerKillAll(t *testing.T) {
 }
 
 func TestDaemonRestartWithRunningShim(t *testing.T) {
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithProcessArgs("sleep", "100")))
 	if err != nil {
 		t.Fatal(err)
@@ -1168,23 +977,8 @@ func TestDaemonRestartWithRunningShim(t *testing.T) {
 func TestContainerRuntimeOptionsv2(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(
 		ctx, id,
@@ -1423,23 +1217,8 @@ func TestUIDNoGID(t *testing.T) {
 func TestBindLowPortNonRoot(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
 		WithNewSpec(oci.WithImageConfig(image), withProcessArgs("nc", "-l", "-p", "80"), oci.WithUIDGID(1000, 1000)),
@@ -1479,23 +1258,8 @@ func TestBindLowPortNonRoot(t *testing.T) {
 func TestBindLowPortNonOpt(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
 		WithNewSpec(oci.WithImageConfig(image), withProcessArgs("nc", "-l", "-p", "80"), oci.WithUIDGID(1000, 1000), oci.WithAmbientCapabilities([]string{"CAP_NET_BIND_SERVICE"})),
@@ -1652,19 +1416,8 @@ func TestIssue9103(t *testing.T) {
 		t.Skip("test requires runc")
 	}
 
-	client, err := newClient(t, address)
-	require.NoError(t, err)
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	require.NoError(t, err)
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	for idx, tc := range []struct {
 		desc           string
@@ -1756,21 +1509,8 @@ func TestIssue10589(t *testing.T) {
 		t.Skip("test requires runc")
 	}
 
-	client, err := newClient(t, address)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		client.Close()
-	})
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	t.Cleanup(cancel)
-
-	image, err = client.GetImage(ctx, testImage)
-	require.NoError(t, err)
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	// 1. Create a sleeping container
 	t.Log("1. Create a sleeping container")

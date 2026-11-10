@@ -26,20 +26,7 @@ import (
 )
 
 func BenchmarkContainerCreate(b *testing.B) {
-	client, err := newClient(b, address)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer client.Close()
-
-	ctx, cancel := testContext(b)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		b.Error(err)
-		return
-	}
+	ctx, client, image := setupImage(b)
 	spec, err := oci.GenerateSpec(ctx, client, &containers.Container{ID: b.Name()}, oci.WithImageConfig(image), withTrue())
 	if err != nil {
 		b.Error(err)
@@ -69,20 +56,7 @@ func BenchmarkContainerCreate(b *testing.B) {
 }
 
 func BenchmarkContainerStart(b *testing.B) {
-	client, err := newClient(b, address)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer client.Close()
-
-	ctx, cancel := testContext(b)
-	defer cancel()
-
-	image, err := client.GetImage(ctx, testImage)
-	if err != nil {
-		b.Error(err)
-		return
-	}
+	ctx, client, image := setupImage(b)
 	spec, err := oci.GenerateSpec(ctx, client, &containers.Container{ID: b.Name()}, oci.WithImageConfig(image), withTrue())
 	if err != nil {
 		b.Error(err)

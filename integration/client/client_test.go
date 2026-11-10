@@ -203,6 +203,27 @@ func newClient(t testing.TB, address string, opts ...Opt) (*Client, error) {
 	return New(address, opts...)
 }
 
+// setupImage returns a test context, a client connected to the test daemon,
+// and the test image. The context is canceled and the client closed when the
+// test and its cleanups finish.
+func setupImage(t testing.TB) (context.Context, *Client, Image) {
+	t.Helper()
+	client, err := newClient(t, address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { client.Close() })
+
+	ctx, cancel := testContext(t)
+	t.Cleanup(cancel)
+
+	image, err := client.GetImage(ctx, testImage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ctx, client, image
+}
+
 func TestNewClient(t *testing.T) {
 	t.Parallel()
 

@@ -108,23 +108,8 @@ func TestNewContainer(t *testing.T) {
 func TestContainerStart(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withExitStatus(7)))
 	if err != nil {
 		t.Fatal(err)
@@ -203,23 +188,8 @@ func copyShim(shimPath string) (string, error) {
 func TestContainerStartWithAbsRuntimePath(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withExitStatus(7)))
 	if err != nil {
 		t.Fatal(err)
@@ -299,24 +269,9 @@ func TestContainerStartWithAbsRuntimePath(t *testing.T) {
 func TestContainerOutput(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-		expected    = "kingkoye"
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
+	expected := "kingkoye"
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withProcessArgs("echo", expected)))
 	if err != nil {
 		t.Fatal(err)
@@ -367,23 +322,8 @@ func withStdout(stdout io.Writer) cio.Opt {
 func TestContainerWait(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -428,23 +368,8 @@ func TestContainerWait(t *testing.T) {
 func TestContainerExec(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -513,23 +438,8 @@ func TestContainerExec(t *testing.T) {
 func TestContainerLargeExecArgs(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -589,23 +499,8 @@ func TestContainerLargeExecArgs(t *testing.T) {
 func TestContainerPids(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -702,23 +597,8 @@ func TestContainerPids(t *testing.T) {
 func TestContainerCloseIO(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withCat()))
 	if err != nil {
@@ -758,23 +638,8 @@ func TestContainerCloseIO(t *testing.T) {
 func TestDeleteRunningContainer(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -813,23 +678,8 @@ func TestDeleteRunningContainer(t *testing.T) {
 func TestContainerKill(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -878,24 +728,9 @@ func TestKillContainerDeletedByRunc(t *testing.T) {
 		t.Skip("test requires runc")
 	}
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-		runcRoot    = "/tmp/runc-test"
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
+	runcRoot := "/tmp/runc-test"
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
 		WithNewSpec(oci.WithImageConfig(image), longCommand),
@@ -944,23 +779,8 @@ func TestKillContainerDeletedByRunc(t *testing.T) {
 func TestContainerNoBinaryExists(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
@@ -991,23 +811,8 @@ func TestContainerNoBinaryExists(t *testing.T) {
 func TestContainerExecNoBinaryExists(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -1056,23 +861,8 @@ func TestContainerExecNoBinaryExists(t *testing.T) {
 func TestWaitStoppedTask(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withExitStatus(7)))
 	if err != nil {
@@ -1122,23 +912,8 @@ func TestWaitStoppedTask(t *testing.T) {
 func TestWaitStoppedProcess(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -1210,23 +985,8 @@ func TestWaitStoppedProcess(t *testing.T) {
 func TestTaskForceDelete(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
 		t.Fatal(err)
@@ -1251,23 +1011,8 @@ func TestTaskForceDelete(t *testing.T) {
 func TestProcessForceDelete(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
 		t.Fatal(err)
@@ -1323,24 +1068,9 @@ func TestProcessForceDelete(t *testing.T) {
 func TestContainerHostname(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-		expected    = "myhostname"
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
+	expected := "myhostname"
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image),
 		withProcessArgs("hostname"),
@@ -1392,23 +1122,8 @@ func TestContainerHostname(t *testing.T) {
 func TestContainerExitedAtSet(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withTrue()))
 	if err != nil {
@@ -1452,23 +1167,8 @@ func TestContainerExitedAtSet(t *testing.T) {
 func TestDeleteContainerExecCreated(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -1519,23 +1219,8 @@ func TestDeleteContainerExecCreated(t *testing.T) {
 func TestContainerMetrics(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
 		WithNewSpec(oci.WithImageConfig(image), longCommand))
@@ -1573,23 +1258,8 @@ func TestContainerMetrics(t *testing.T) {
 func TestDeletedContainerMetrics(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
 		WithNewSpec(oci.WithImageConfig(image), withExitStatus(0)))
@@ -1787,23 +1457,8 @@ func TestContainerHook(t *testing.T) {
 
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	hook := func(_ context.Context, _ oci.Client, _ *containers.Container, s *specs.Spec) error {
 		if s.Hooks == nil {
 			s.Hooks = &specs.Hooks{}
@@ -1902,23 +1557,8 @@ func TestContainerExecLargeOutputWithTTY(t *testing.T) {
 
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -2003,23 +1643,8 @@ func TestContainerExecLargeOutputWithTTY(t *testing.T) {
 func TestShortRunningTaskPid(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), shortCommand))
 	if err != nil {
@@ -2215,23 +1840,8 @@ func TestRegressionIssue6429(t *testing.T) {
 }
 
 func TestDaemonRestart(t *testing.T) {
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -2332,23 +1942,8 @@ func (f *directIO) Delete() error {
 }
 
 func initContainerAndCheckChildrenDieOnKill(t *testing.T, opts ...oci.SpecOpts) {
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	opts = append(opts, oci.WithImageConfig(image))
 	opts = append(opts, longCommand)
@@ -2418,23 +2013,8 @@ func TestTaskResize(t *testing.T) {
 
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id,
 		WithNewSnapshot(id, image),
@@ -2545,23 +2125,8 @@ func TestContainerNoImage(t *testing.T) {
 func TestContainerNoSTDIN(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), withExitStatus(0)))
 	if err != nil {
 		t.Fatal(err)
@@ -2594,23 +2159,8 @@ func TestContainerNoSTDIN(t *testing.T) {
 func TestTaskSpec(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), longCommand))
 	if err != nil {
@@ -2664,23 +2214,8 @@ func TestTaskSpec(t *testing.T) {
 func TestContainerUsername(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	username := "www-data"
 	command := []string{
@@ -2733,23 +2268,8 @@ func TestContainerUsername(t *testing.T) {
 func TestContainerPTY(t *testing.T) {
 	t.Parallel()
 
-	client, err := newClient(t, address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-
-	var (
-		image       Image
-		ctx, cancel = testContext(t)
-		id          = t.Name()
-	)
-	defer cancel()
-
-	image, err = client.GetImage(ctx, testImage)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ctx, client, image := setupImage(t)
+	id := t.Name()
 
 	container, err := client.NewContainer(ctx, id, WithNewSnapshot(id, image), WithNewSpec(oci.WithImageConfig(image), oci.WithTTY, withProcessArgs("echo", "hello")))
 	if err != nil {
