@@ -17,13 +17,6 @@
 package server
 
 import (
-	"errors"
-	"fmt"
-	"sync"
-
-	"github.com/containerd/errdefs"
-	"github.com/containerd/log"
-	"github.com/containerd/ttrpc"
 	"google.golang.org/grpc"
 	runtime "k8s.io/cri-api/pkg/apis/runtime/v1"
 
@@ -37,35 +30,9 @@ func (c *criService) StreamPodSandboxStats(r *runtime.StreamPodSandboxStatsReque
 		Filter: r.GetFilter(),
 	}
 	sandboxes := c.sandboxesForListPodSandboxStatsRequest(listReq)
-	stats, errs := make([]*runtime.PodSandboxStats, len(sandboxes)), make([]error, len(sandboxes))
-
-	var wg sync.WaitGroup
-	for i, sandbox := range sandboxes {
-		wg.Go(func() {
-			sandboxStats, err := c.podSandboxStats(ctx, sandbox) //nolint: staticcheck
-			switch {
-			case errdefs.IsUnavailable(err), errdefs.IsNotFound(err):
-				log.G(ctx).WithField("podsandboxid", sandbox.ID).WithError(err).Debug("failed to get pod sandbox stats, this is likely a transient error")
-			case errors.Is(err, ttrpc.ErrClosed):
-				log.G(ctx).WithField("podsandboxid", sandbox.ID).WithError(err).Debug("failed to get pod sandbox stats, connection closed")
-			case err != nil: //nolint: staticcheck
-				errs[i] = fmt.Errorf("failed to decode sandbox container metrics for sandbox %q: %w", sandbox.ID, err)
-			default:
-				stats[i] = sandboxStats
-			}
-		})
-	}
-	wg.Wait()
-
-	if err := errors.Join(errs...); err != nil {
+	podSandboxStats, err := c.collectPodSandboxStats(ctx, sandboxes)
+	if err != nil {
 		return err
-	}
-
-	var podSandboxStats []*runtime.PodSandboxStats
-	for _, stat := range stats {
-		if stat != nil {
-			podSandboxStats = append(podSandboxStats, stat)
-		}
 	}
 
 	return criutil.SendInBatches(ctx, podSandboxStats, criutil.DefaultStreamBatchSize, func(batch []*runtime.PodSandboxStats) error {

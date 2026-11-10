@@ -35,6 +35,15 @@ func (c *criService) ListPodSandboxStats(
 	r *runtime.ListPodSandboxStatsRequest,
 ) (*runtime.ListPodSandboxStatsResponse, error) {
 	sandboxes := c.sandboxesForListPodSandboxStatsRequest(r)
+	stats, err := c.collectPodSandboxStats(ctx, sandboxes)
+	return &runtime.ListPodSandboxStatsResponse{Stats: stats}, err
+}
+
+// collectPodSandboxStats gets the stats of the given sandboxes concurrently.
+// It returns the stats it could collect, along with the joined errors of the
+// sandboxes that failed. Sandboxes that are unavailable, not found, or whose
+// connection is closed are skipped without error.
+func (c *criService) collectPodSandboxStats(ctx context.Context, sandboxes []sandboxstore.Sandbox) ([]*runtime.PodSandboxStats, error) {
 	stats, errs := make([]*runtime.PodSandboxStats, len(sandboxes)), make([]error, len(sandboxes))
 
 	var wg sync.WaitGroup
@@ -56,10 +65,10 @@ func (c *criService) ListPodSandboxStats(
 	}
 	wg.Wait()
 
-	podSandboxStats := new(runtime.ListPodSandboxStatsResponse)
+	var podSandboxStats []*runtime.PodSandboxStats
 	for _, stat := range stats {
 		if stat != nil {
-			podSandboxStats.Stats = append(podSandboxStats.Stats, stat)
+			podSandboxStats = append(podSandboxStats, stat)
 		}
 	}
 
